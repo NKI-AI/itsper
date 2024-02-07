@@ -14,7 +14,7 @@ Usage
 =====
 Type `itsper -h` to know more.
 
-License and Usage
------------------
+License
+-------
 
 itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
