@@ -1,15 +1,16 @@
 import json
 from pathlib import Path
-from typing import Any, List, Dict, Union
+from typing import Any, Dict, List, Union
 
 from dlup import SlideImage
 from dlup.annotations import WsiAnnotations
-
-from shapely.affinity import translate, affine_transform
+from shapely.affinity import affine_transform, translate
 from shapely.geometry import mapping
 
 
-def offset_and_scale_tumorbed(slide_image: SlideImage, annotations: WsiAnnotations, native_mpp_at_inference: float = 1.0) -> WsiAnnotations:
+def offset_and_scale_tumorbed(
+    slide_image: SlideImage, annotations: WsiAnnotations, native_mpp_at_inference: float = 1.0
+) -> WsiAnnotations:
     """
     Apply an appropriate scaling and translation to the tumorbed annotations.
 
@@ -17,9 +18,10 @@ def offset_and_scale_tumorbed(slide_image: SlideImage, annotations: WsiAnnotatio
 
     1. Read the tumorbed annotations from slidescore at base level.
     2. Translate the annotations to remove the slide offset at the base level.
-    3. Rescale the annotations to 1 microns per pixel (mpp) so that it matches with the base resolution of prediction tiff images.
+    3. Rescale the annotations to microns per pixel (mpp) set during inference time
+    so that it matches with the base resolution of prediction tiff images.
 
-    Return the rescaled, corrected annotations using WsiAnnotations from dlup.
+    And return the rescaled, corrected annotations using WsiAnnotations from dlup.
 
     Parameters
     ----------

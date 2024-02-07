@@ -14,4 +14,3 @@ License and Usage
 -----------------
 
 itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
-

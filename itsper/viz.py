@@ -30,18 +30,14 @@ def paste_masked_tile_and_draw_polygons(image_canvas, sample, tile_size):
 def visualize(original_image, prediction_image, tiff_file, output_path, slide_id):
     viz_image = Image.new(
         "RGBA",
-        (original_image.size[0] + prediction_image.size[0] + 5,
-         original_image.size[1] + 30),
+        (original_image.size[0] + prediction_image.size[0] + 5, original_image.size[1] + 30),
         (255, 255, 255, 255),
     )
     viz_image.paste(original_image, (0, 0))
-    viz_image.paste(prediction_image,
-                    (original_image.size[0] + 5, 0))
+    viz_image.paste(prediction_image, (original_image.size[0] + 5, 0))
 
     viz_image.convert("RGB")
-    viz_image.save(
-        str(output_path) + "/" + tiff_file.parent.name + "/" + slide_id + ".png"
-    )
+    viz_image.save(str(output_path) + "/" + tiff_file.parent.name + "/" + slide_id + ".png")
 
 
 def render_tumor_bed(image_dataset: Generator, image_canvas: Image, tile_size: tuple) -> None:

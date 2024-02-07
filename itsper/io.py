@@ -1,7 +1,7 @@
 import logging
 
 
-def get_logger(name: str)-> logging.Logger:
+def get_logger(name: str) -> logging.Logger:
     # Create a custom logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)  # Set logger to capture info level messages
@@ -11,7 +11,7 @@ def get_logger(name: str)-> logging.Logger:
     ch.setLevel(logging.INFO)
 
     # Create formatter and add it to the handler
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     ch.setFormatter(formatter)
 
     # Add the handler to the logger

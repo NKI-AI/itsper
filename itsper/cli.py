@@ -13,7 +13,9 @@ def main(args):
     native_mpp_for_inference = float(args.inference_mpp)
     tile_size_for_inference = (int(args.inference_tile_size), int(args.inference_tile_size))
 
-    itsp_computer(output_path, images_path, inference_path, annotation_path, native_mpp_for_inference, tile_size_for_inference)
+    itsp_computer(
+        output_path, images_path, inference_path, annotation_path, native_mpp_for_inference, tile_size_for_inference
+    )
 
 
 if __name__ == "__main__":

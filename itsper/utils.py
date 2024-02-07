@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 
 
-def make_csv(output_path: Path):
+def make_csv(output_path: Path) -> None:
     csv_file_path = output_path / Path("slide_details.csv")
     if not csv_file_path.is_file():
         with open(csv_file_path, "w", newline="") as file:
@@ -10,7 +10,7 @@ def make_csv(output_path: Path):
             writer.writerow(["Folder Name", "Image ID", "ITSP_AI"])  # Writing the header
 
 
-def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: float):
+def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: float) -> None:
     slide_details = [tiff_file.parent.name, slide_id, str(itsp)]
 
     csv_file_path = output_path / Path("slide_details.csv")
@@ -19,7 +19,7 @@ def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: fl
         writer.writerow(slide_details)
 
 
-def get_list_of_image_folders(output_path: Path, images_path: Path) -> list:
+def get_list_of_image_folders(output_path: Path, images_path: Path) -> list[Path]:
     folder_names = []
     for entity_in_path in images_path.iterdir():
         if entity_in_path.is_dir():
@@ -33,7 +33,9 @@ def make_directories_if_needed(folder: Path, output_path: Path) -> None:
         (output_path / folder.name).mkdir()
 
 
-def get_list_of_files(image_folder: Path, annotations_folder: Path, tiff_folder: Path) -> tuple[list, list, list]:
+def get_list_of_files(
+    image_folder: Path, annotations_folder: Path, tiff_folder: Path
+) -> tuple[list[Path], list[Path], list[Path]]:
     paths_to_images = image_folder.glob("**/*.mrxs")
     image_files = [x for x in paths_to_images if x.is_file()]
 
@@ -44,4 +46,3 @@ def get_list_of_files(image_folder: Path, annotations_folder: Path, tiff_folder:
     tiff_files = [x for x in paths_to_inference if x.is_file()]
 
     return image_files, annotation_files, tiff_files
-

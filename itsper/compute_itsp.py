@@ -12,8 +12,10 @@ from PIL import Image
 
 from itsper.annotations import offset_and_scale_tumorbed
 from itsper.io import get_logger
-from itsper.utils import get_list_of_image_folders, make_directories_if_needed, get_list_of_files, make_csv_entries
-from itsper.viz import paste_masked_tile_and_draw_polygons, visualize, render_tumor_bed, crop_image
+from itsper.utils import (get_list_of_files, get_list_of_image_folders,
+                          make_csv_entries, make_directories_if_needed)
+from itsper.viz import (crop_image, paste_masked_tile_and_draw_polygons,
+                        render_tumor_bed, visualize)
 
 Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 COLOR_MAP = {"green": 1, "red": 2, "yellow": 3}
@@ -57,11 +59,7 @@ def assign_index_to_pixels(image: Image, roi: np.ndarray) -> np.ndarray:
     valid_indices = [1, 2, 3]
     image = np.array(image)
     # Assuming image is a NumPy array of shape (height, width, 4) and roi of shape (height, width)
-    target_colors = np.array([
-        [0, 128, 0, 255],  # green
-        [255, 0, 0, 255],  # red
-        [255, 255, 0, 255]  # yellow
-    ])
+    target_colors = np.array([[0, 128, 0, 255], [255, 0, 0, 255], [255, 255, 0, 255]])  # green  # red  # yellow
 
     # Calculate the difference between each pixel and the target colors
     diff = np.linalg.norm(image[:, :, None, :] - target_colors[None, None, :, :], axis=3)
@@ -97,22 +95,25 @@ def setup(image_path, annotation_path, target_mpp):
     original_image_canvas = Image.new("RGBA", tuple(scaled_image_size), (255, 255, 255, 255))
     prediction_output_canvas = Image.new("RGBA", tuple(scaled_image_size), (255, 255, 255, 255))
 
-    output_dict = {"slide_image": slide_image,
-                   "scaling": scaling,
-                   "scaled_offset": scaled_offset,
-                   "scaled_bounds": scaled_bounds,
-                   "scaled_image_size": scaled_image_size,
-                   "annotations": annotations,
-                   "offset_annotations": offset_annotations,
-                   "scaled_annotations": scaled_annotations,
-                   "original_image_canvas": original_image_canvas,
-                   "prediction_image_canvas": prediction_output_canvas,
-                   "transform": transform
-                   }
+    output_dict = {
+        "slide_image": slide_image,
+        "scaling": scaling,
+        "scaled_offset": scaled_offset,
+        "scaled_bounds": scaled_bounds,
+        "scaled_image_size": scaled_image_size,
+        "annotations": annotations,
+        "offset_annotations": offset_annotations,
+        "scaled_annotations": scaled_annotations,
+        "original_image_canvas": original_image_canvas,
+        "prediction_image_canvas": prediction_output_canvas,
+        "transform": transform,
+    }
     return output_dict
 
 
-def compute_itsp_and_render_visualization(image_dataset: Generator, image_canvas: Image, tile_size: tuple, render_images: bool = True) -> float:
+def compute_itsp_and_render_visualization(
+    image_dataset: Generator, image_canvas: Image, tile_size: tuple, render_images: bool = True
+) -> float:
     total_tumor = 0
     total_stroma = 0
     total_others = 0
@@ -131,7 +132,9 @@ def compute_itsp_and_render_visualization(image_dataset: Generator, image_canvas
     return itsp
 
 
-def itsp_computer(output_path, images_path, inference_path, path_to_anotation_files, target_mpp, tile_size, render_images: bool = True):
+def itsp_computer(
+    output_path, images_path, inference_path, path_to_anotation_files, target_mpp, tile_size, render_images: bool = True
+):
     list_of_image_folders = get_list_of_image_folders(output_path=output_path, images_path=images_path)
     for folder in list_of_image_folders:
         logger.info(f"Looking into slides from {folder.name}")
@@ -187,10 +190,21 @@ def itsp_computer(output_path, images_path, inference_path, path_to_anotation_fi
                 backend="OPENSLIDE",
             )
 
-            itsp = compute_itsp_and_render_visualization(prediction_slide_dataset, setup_dictionary["prediction_image_canvas"], tile_size=tile_size, render_images=render_images)
+            itsp = compute_itsp_and_render_visualization(
+                prediction_slide_dataset,
+                setup_dictionary["prediction_image_canvas"],
+                tile_size=tile_size,
+                render_images=render_images,
+            )
             logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
 
             render_tumor_bed(image_dataset, setup_dictionary["original_image_canvas"], tile_size=tile_size)
             original_tumor_bed, prediction_tumor_bed = crop_image(setup_dictionary)
             make_csv_entries(tiff_file=tiff_file, output_path=output_path, slide_id=slide_id, itsp=itsp)
-            visualize(original_tumor_bed, prediction_tumor_bed, tiff_file=tiff_file, output_path=output_path, slide_id=slide_id)
+            visualize(
+                original_tumor_bed,
+                prediction_tumor_bed,
+                tiff_file=tiff_file,
+                output_path=output_path,
+                slide_id=slide_id,
+            )
