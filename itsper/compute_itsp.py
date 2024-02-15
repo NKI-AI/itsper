@@ -12,7 +12,7 @@ from PIL import Image
 
 from itsper.annotations import offset_and_scale_tumorbed
 from itsper.io import get_logger
-from itsper.utils import (get_list_of_files, get_list_of_image_folders,
+from itsper.utils import (get_list_of_files, verify_folders,
                           make_csv_entries, make_directories_if_needed)
 from itsper.viz import (crop_image, paste_masked_tile_and_draw_polygons,
                         render_tumor_bed, visualize)
@@ -135,14 +135,10 @@ def compute_itsp_and_render_visualization(
 def itsp_computer(
     output_path, images_path, inference_path, path_to_anotation_files, target_mpp, tile_size, render_images: bool = True
 ):
-    list_of_image_folders = get_list_of_image_folders(output_path=output_path, images_path=images_path)
-    for folder in list_of_image_folders:
-        logger.info(f"Looking into slides from {folder.name}")
-        image_folder = Path(images_path / folder.name)
-        annotations_folder = Path(path_to_anotation_files / folder.name)
-        tiff_folder = Path(inference_path / folder.name)
+    if verify_folders(path=images_path):
+        logger.info(f"Looking into slides from {images_path.name}")
 
-        image_files, annotation_files, tiff_files = get_list_of_files(image_folder, annotations_folder, tiff_folder)
+        image_files, annotation_files, tiff_files = get_list_of_files(images_path, path_to_anotation_files, inference_path)
 
         for tiff_file in tiff_files:
             slide_id = tiff_file.stem
@@ -158,7 +154,7 @@ def itsp_computer(
                 continue
 
             logger.info(f"Generating visualizations for: {slide_id}")
-            make_directories_if_needed(folder=folder, output_path=output_path)
+            make_directories_if_needed(folder=images_path, output_path=output_path)
             setup_dictionary = setup(image_path, annotation_path, target_mpp)
 
             image_dataset = TiledWsiDataset.from_standard_tiling(

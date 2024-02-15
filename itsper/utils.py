@@ -19,12 +19,12 @@ def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: fl
         writer.writerow(slide_details)
 
 
-def get_list_of_image_folders(output_path: Path, images_path: Path) -> list[Path]:
-    folder_names = []
-    for entity_in_path in images_path.iterdir():
-        if entity_in_path.is_dir():
-            folder_names.append(output_path / entity_in_path.name)
-    return folder_names
+def verify_folders(path: Path) -> bool:
+    file_list = list(path.glob(f'*.mrxs'))
+    if len(file_list) > 0:
+        return True
+    else:
+        raise RuntimeError(f"No mrxs images found in {path}")
 
 
 def make_directories_if_needed(folder: Path, output_path: Path) -> None:
