@@ -1,5 +1,7 @@
 import csv
 from pathlib import Path
+from typing import Optional, Any
+from dlup.annotations import WsiAnnotations
 
 
 def make_csv(output_path: Path) -> None:
@@ -8,6 +10,14 @@ def make_csv(output_path: Path) -> None:
         with open(csv_file_path, "w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(["Folder Name", "Image ID", "ITSP_AI"])  # Writing the header
+
+
+def check_if_roi_is_present(sample: dict[str, Any]) -> WsiAnnotations | None:
+    if sample.get("annotation_data", None) is not None:
+        roi = sample["annotation_data"]["roi"]
+    else:
+        roi = None
+    return roi
 
 
 def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: float) -> None:
@@ -19,12 +29,12 @@ def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: fl
         writer.writerow(slide_details)
 
 
-def verify_folders(path: Path) -> bool:
-    file_list = list(path.glob(f'*.mrxs'))
+def verify_folders(path: Path, image_format: str) -> bool:
+    file_list = list(path.glob(f'*.{image_format}'))
     if len(file_list) > 0:
         return True
     else:
-        raise RuntimeError(f"No mrxs images found in {path}")
+        raise RuntimeError(f"No {image_format} images found in {path}")
 
 
 def make_directories_if_needed(folder: Path, output_path: Path) -> None:
@@ -34,13 +44,16 @@ def make_directories_if_needed(folder: Path, output_path: Path) -> None:
 
 
 def get_list_of_files(
-    image_folder: Path, annotations_folder: Path, tiff_folder: Path
+    image_folder: Path, image_format: str, annotations_folder: Optional[Path | None], tiff_folder: Path
 ) -> tuple[list[Path], list[Path], list[Path]]:
-    paths_to_images = image_folder.glob("**/*.mrxs")
+    paths_to_images = image_folder.glob(f"**/*.{image_format}")
     image_files = [x for x in paths_to_images if x.is_file()]
 
-    paths_to_annotation = annotations_folder.glob("**/*.json")
-    annotation_files = [x for x in paths_to_annotation if x.is_file()]
+    if annotations_folder is not None:
+        paths_to_annotation = annotations_folder.glob("**/*.json")
+        annotation_files = [x for x in paths_to_annotation if x.is_file()]
+    else:
+        annotation_files = None
 
     paths_to_inference = tiff_folder.glob("**/*.tiff")
     tiff_files = [x for x in paths_to_inference if x.is_file()]

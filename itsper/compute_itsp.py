@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 
 import numpy as np
 from dlup import SlideImage
@@ -13,9 +13,9 @@ from PIL import Image
 from itsper.annotations import offset_and_scale_tumorbed
 from itsper.io import get_logger
 from itsper.utils import (get_list_of_files, verify_folders,
-                          make_csv_entries, make_directories_if_needed)
+                          make_csv_entries, make_directories_if_needed, check_if_roi_is_present)
 from itsper.viz import (crop_image, paste_masked_tile_and_draw_polygons,
-                        render_tumor_bed, visualize)
+                        render_tumor_bed, visualize, colorize)
 
 Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 COLOR_MAP = {"green": 1, "red": 2, "yellow": 3}
@@ -27,7 +27,7 @@ def get_class_pixels(sample: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np
     """
     Obtain the pixels corresponding to each class and the region of interest.
     """
-    curr_mask = sample["indexed_image"]
+    curr_mask = np.asarray(sample["indexed_image"])
     stroma_mask = (curr_mask == 1).astype(np.uint8)
     tumor_mask = (curr_mask == 2).astype(np.uint8)
     other_mask = (curr_mask == 3).astype(np.uint8)
@@ -52,7 +52,7 @@ def _is_color_in_range(color, target_colors):
     return closest_color_index
 
 
-def assign_index_to_pixels(image: Image, roi: np.ndarray) -> np.ndarray:
+def assign_index_to_pixels(image: Image, roi: Optional[np.ndarray] = None) -> np.ndarray:
     """
     Vectorized version to convert RGB pixel values to indices based on target colors.
     """
@@ -71,26 +71,33 @@ def assign_index_to_pixels(image: Image, roi: np.ndarray) -> np.ndarray:
     if not np.all(np.isin(indexed_image, valid_indices)):
         raise ValueError("Unknown color detected in the image.")
 
-    # Apply the ROI mask
-    indexed_image = indexed_image * roi
+    if roi is not None:
+        # Apply the ROI mask
+        indexed_image = indexed_image * roi
 
     return indexed_image
 
 
-def setup(image_path, annotation_path, target_mpp):
+def setup(image_path: Path, annotation_path: Optional[Path], target_mpp: float):
     slide_image = SlideImage.from_file_path(image_path)
 
     scaling = slide_image.get_scaling(target_mpp)
     scaled_offset, scaled_bounds = slide_image.get_scaled_slide_bounds(scaling)
     scaled_image_size = slide_image.get_scaled_size(scaling)
 
-    annotations = WsiAnnotations.from_geojson(annotation_path, scaling=1.0)
-    offset_annotations = offset_and_scale_tumorbed(slide_image, annotations)
+    if annotation_path is not None:
+        annotations = WsiAnnotations.from_geojson(annotation_path, scaling=1.0)
+        offset_annotations = offset_and_scale_tumorbed(slide_image, annotations)
 
-    roi_name = annotations.available_labels[0].label
-    transform = ConvertAnnotationsToMask(roi_name=roi_name, index_map={roi_name: 1})
+        roi_name = annotations.available_labels[0].label
+        transform = ConvertAnnotationsToMask(roi_name=roi_name, index_map={roi_name: 1})
 
-    scaled_annotations = WsiAnnotations.from_geojson(annotation_path, scaling=scaling)
+        scaled_annotations = WsiAnnotations.from_geojson(annotation_path, scaling=scaling)
+    else:
+        offset_annotations = None
+        scaled_annotations = None
+        transform = None
+        annotations = None
 
     original_image_canvas = Image.new("RGBA", tuple(scaled_image_size), (255, 255, 255, 255))
     prediction_output_canvas = Image.new("RGBA", tuple(scaled_image_size), (255, 255, 255, 255))
@@ -118,7 +125,10 @@ def compute_itsp_and_render_visualization(
     total_stroma = 0
     total_others = 0
     for sample in image_dataset:
-        indexed_image = assign_index_to_pixels(sample["image"], roi=sample["annotation_data"]["roi"])
+        roi = check_if_roi_is_present(sample)
+        if sample["image"].mode == "L":
+            sample["image"] = colorize(sample["image"])
+        indexed_image = assign_index_to_pixels(sample["image"], roi=roi)
         sample["indexed_image"] = indexed_image
         stroma_mask, tumor_mask, other_mask = get_class_pixels(sample)
         total_tumor += tumor_mask.sum()
@@ -127,80 +137,81 @@ def compute_itsp_and_render_visualization(
         if render_images:
             paste_masked_tile_and_draw_polygons(image_canvas, sample, tile_size)
 
-    itsp = (total_stroma * 100) / (total_stroma + total_tumor + total_others)
+    itsp = (total_stroma * 100) / (total_stroma + total_tumor)
     itsp = round(itsp, 2)
     return itsp
 
 
 def itsp_computer(
-    output_path, images_path, inference_path, path_to_anotation_files, target_mpp, tile_size, render_images: bool = True
+    output_path: Path, images_path: Path, inference_path: Path, path_to_anotation_files: Optional[Path], image_format: str, target_mpp: float, tile_size: tuple[int, int], render_images: bool = True
 ):
-    if verify_folders(path=images_path):
+    if verify_folders(path=images_path, image_format=image_format):
         logger.info(f"Looking into slides from {images_path.name}")
 
-        image_files, annotation_files, tiff_files = get_list_of_files(images_path, path_to_anotation_files, inference_path)
+        image_files, annotation_files, tiff_files = get_list_of_files(images_path, image_format, path_to_anotation_files, inference_path)
 
-        for tiff_file in tiff_files:
-            slide_id = tiff_file.stem
-            image_path = [image_file for image_file in image_files if image_file.stem == slide_id][0]
-            annotation_path = [
-                annotation_file for annotation_file in annotation_files if annotation_file.parent.name == slide_id
-            ]
+        if len(tiff_files) > 0:
+            for tiff_file in tiff_files:
+                slide_id = tiff_file.stem
+                image_path = [image_file for image_file in image_files if image_file.stem == slide_id][0]
+                if annotation_files is not None and len(annotation_files) > 0:
+                    annotation_path = [
+                        annotation_file for annotation_file in annotation_files if annotation_file.parent.name == slide_id
+                    ]
+                    logger.info(f"Generating visualizations for: {slide_id}")
+                    make_directories_if_needed(folder=images_path, output_path=output_path)
+                else:
+                    logger.info(f"{slide_id} has no tumorbed annotation.")
+                    annotation_path = None
 
-            if len(annotation_path) > 0:
-                annotation_path = annotation_path[0]
+                setup_dictionary = setup(image_path, annotation_path, target_mpp)
+
+                image_dataset = TiledWsiDataset.from_standard_tiling(
+                    image_path,
+                    mpp=target_mpp,
+                    tile_size=tile_size,
+                    tile_overlap=(0, 0),
+                    crop=False,
+                    annotations=setup_dictionary["annotations"],
+                    mask=setup_dictionary["annotations"],
+                    mask_threshold=0.0,
+                    transform=setup_dictionary["transform"],
+                    tile_mode=TilingMode.overflow,
+                    backend="OPENSLIDE",
+                )
+                prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
+                    tiff_file,
+                    mpp=target_mpp,
+                    tile_size=tile_size,
+                    tile_overlap=(0, 0),
+                    crop=False,
+                    annotations=setup_dictionary["offset_annotations"],
+                    mask=setup_dictionary["offset_annotations"],
+                    mask_threshold=0.0,
+                    transform=setup_dictionary["transform"],
+                    tile_mode=TilingMode.overflow,
+                    interpolator=Resampling.NEAREST,
+                    backend="OPENSLIDE",
+                )
+
+                itsp = compute_itsp_and_render_visualization(
+                    prediction_slide_dataset,
+                    setup_dictionary["prediction_image_canvas"],
+                    tile_size=tile_size,
+                    render_images=render_images,
+                )
+                logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
+
+                if annotation_files is not None:
+                    render_tumor_bed(image_dataset, setup_dictionary["original_image_canvas"], tile_size=tile_size)
+                    original_tumor_bed, prediction_tumor_bed = crop_image(setup_dictionary)
+                    visualize(
+                        original_tumor_bed,
+                        prediction_tumor_bed,
+                        tiff_file=tiff_file,
+                        output_path=output_path,
+                        slide_id=slide_id,
+                    )
+                make_csv_entries(tiff_file=tiff_file, output_path=output_path, slide_id=slide_id, itsp=itsp)
             else:
-                logger.info(f"Skipping {slide_id} because of no tumorbed annotation.")
-                continue
-
-            logger.info(f"Generating visualizations for: {slide_id}")
-            make_directories_if_needed(folder=images_path, output_path=output_path)
-            setup_dictionary = setup(image_path, annotation_path, target_mpp)
-
-            image_dataset = TiledWsiDataset.from_standard_tiling(
-                image_path,
-                mpp=target_mpp,
-                tile_size=tile_size,
-                tile_overlap=(0, 0),
-                crop=False,
-                annotations=setup_dictionary["annotations"],
-                mask=setup_dictionary["annotations"],
-                mask_threshold=0.0,
-                transform=setup_dictionary["transform"],
-                tile_mode=TilingMode.overflow,
-                backend="OPENSLIDE",
-            )
-
-            prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
-                tiff_file,
-                mpp=target_mpp,
-                tile_size=tile_size,
-                tile_overlap=(0, 0),
-                crop=False,
-                annotations=setup_dictionary["offset_annotations"],
-                mask=setup_dictionary["offset_annotations"],
-                mask_threshold=0.0,
-                transform=setup_dictionary["transform"],
-                tile_mode=TilingMode.overflow,
-                interpolator=Resampling.NEAREST,
-                backend="OPENSLIDE",
-            )
-
-            itsp = compute_itsp_and_render_visualization(
-                prediction_slide_dataset,
-                setup_dictionary["prediction_image_canvas"],
-                tile_size=tile_size,
-                render_images=render_images,
-            )
-            logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
-
-            render_tumor_bed(image_dataset, setup_dictionary["original_image_canvas"], tile_size=tile_size)
-            original_tumor_bed, prediction_tumor_bed = crop_image(setup_dictionary)
-            make_csv_entries(tiff_file=tiff_file, output_path=output_path, slide_id=slide_id, itsp=itsp)
-            visualize(
-                original_tumor_bed,
-                prediction_tumor_bed,
-                tiff_file=tiff_file,
-                output_path=output_path,
-                slide_id=slide_id,
-            )
+                logger.info(f"Skipping folder {images_path.name} because there are not predictions.")
