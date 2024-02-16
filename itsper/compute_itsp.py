@@ -195,7 +195,7 @@ def itsp_computer(
                         backend="OPENSLIDE",
                     )
                 except Exception as error:
-                    logger.info(f"Failed with OPENSLIDE backend for following reason: {error} \nAttempting with TIFFFILE...")
+                    logger.info(f"OPENSLIDE fails because: {error}. Attempting with TIFFFILE...")
                     prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
                         tiff_file,
                         mpp=target_mpp,
@@ -230,5 +230,5 @@ def itsp_computer(
                         slide_id=slide_id,
                     )
                 make_csv_entries(tiff_file=tiff_file, output_path=output_path, slide_id=slide_id, itsp=itsp)
-            else:
-                logger.info(f"Skipping folder {images_path.name} because there are not predictions.")
+        else:
+            logger.info(f"Skipping folder {images_path.name} because there are not predictions.")
