@@ -179,20 +179,37 @@ def itsp_computer(
                     tile_mode=TilingMode.overflow,
                     backend="OPENSLIDE",
                 )
-                prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
-                    tiff_file,
-                    mpp=target_mpp,
-                    tile_size=tile_size,
-                    tile_overlap=(0, 0),
-                    crop=False,
-                    annotations=setup_dictionary["offset_annotations"],
-                    mask=setup_dictionary["offset_annotations"],
-                    mask_threshold=0.0,
-                    transform=setup_dictionary["transform"],
-                    tile_mode=TilingMode.overflow,
-                    interpolator=Resampling.NEAREST,
-                    backend="OPENSLIDE",
-                )
+                try:
+                    prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
+                        tiff_file,
+                        mpp=target_mpp,
+                        tile_size=tile_size,
+                        tile_overlap=(0, 0),
+                        crop=False,
+                        annotations=setup_dictionary["offset_annotations"],
+                        mask=setup_dictionary["offset_annotations"],
+                        mask_threshold=0.0,
+                        transform=setup_dictionary["transform"],
+                        tile_mode=TilingMode.overflow,
+                        interpolator=Resampling.NEAREST,
+                        backend="OPENSLIDE",
+                    )
+                except Exception as error:
+                    logger.info(f"Failed with OPENSLIDE backend for following reason: {error} \nAttempting with TIFFFILE...")
+                    prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
+                        tiff_file,
+                        mpp=target_mpp,
+                        tile_size=tile_size,
+                        tile_overlap=(0, 0),
+                        crop=False,
+                        annotations=setup_dictionary["offset_annotations"],
+                        mask=setup_dictionary["offset_annotations"],
+                        mask_threshold=0.0,
+                        transform=setup_dictionary["transform"],
+                        tile_mode=TilingMode.overflow,
+                        interpolator=Resampling.NEAREST,
+                        backend="TIFFFILE",
+                    )
 
                 itsp = compute_itsp_and_render_visualization(
                     prediction_slide_dataset,
