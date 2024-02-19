@@ -8,14 +8,19 @@ from dlup.annotations import WsiAnnotations
 from dlup.data.dataset import TiledWsiDataset
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
+from numpy.typing import NDArray
 from PIL import Image
 
 from itsper.annotations import offset_and_scale_tumorbed
 from itsper.io import get_logger
-from itsper.utils import (get_list_of_files, verify_folders,
-                          make_csv_entries, make_directories_if_needed, check_if_roi_is_present)
-from itsper.viz import (crop_image, paste_masked_tile_and_draw_polygons,
-                        render_tumor_bed, visualize, colorize)
+from itsper.utils import (
+    check_if_roi_is_present,
+    get_list_of_files,
+    make_csv_entries,
+    make_directories_if_needed,
+    verify_folders,
+)
+from itsper.viz import colorize, crop_image, paste_masked_tile_and_draw_polygons, render_tumor_bed, visualize
 
 Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 COLOR_MAP = {"green": 1, "red": 2, "yellow": 3}
@@ -23,7 +28,7 @@ COLOR_MAP = {"green": 1, "red": 2, "yellow": 3}
 logger = get_logger(__name__)
 
 
-def get_class_pixels(sample: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def get_class_pixels(sample: dict[str, Any]) -> tuple[NDArray[np.int_], NDArray[np.int_], NDArray[np.int_]]:
     """
     Obtain the pixels corresponding to each class and the region of interest.
     """
@@ -34,27 +39,9 @@ def get_class_pixels(sample: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np
     return stroma_mask, tumor_mask, other_mask
 
 
-def _is_color_in_range(color, target_colors):
-    # Calculate the Euclidean distance between the pixel colors and each target color
-    distances = [
-        np.sqrt(
-            sum(
-                (color_component - target_color_component) ** 2
-                for color_component, target_color_component in zip(color[:3], target_color[:3])
-            )
-        )
-        for target_color in target_colors
-    ]
-
-    # Find the index of the target color with the minimum distance
-    closest_color_index = np.argmin(distances) + 1  # Adding 1 because indexes are 1-based in this case.
-
-    return closest_color_index
-
-
-def assign_index_to_pixels(image: Image, roi: Optional[np.ndarray] = None) -> np.ndarray:
+def assign_index_to_pixels(image: Image, roi: Optional[NDArray[np.float_]] = None) -> NDArray[np.uint8]:
     """
-    Vectorized version to convert RGB pixel values to indices based on target colors.
+    Convert RGB pixel values to indices based on target colors.
     """
     valid_indices = [1, 2, 3]
     image = np.array(image)
@@ -75,10 +62,27 @@ def assign_index_to_pixels(image: Image, roi: Optional[np.ndarray] = None) -> np
         # Apply the ROI mask
         indexed_image = indexed_image * roi
 
-    return indexed_image
+    indexed_image = indexed_image.astype(np.uint8)
+
+    return indexed_image  # type: ignore[no-any-return]
 
 
-def setup(image_path: Path, annotation_path: Optional[Path], target_mpp: float):
+def setup(image_path: Path, annotation_path: Optional[list[Path] | None], target_mpp: float) -> dict[str, Any]:
+    """
+    This function creates a dictionary object containing all the components necessary for the computation of ITSP.
+    If there is an annotation file, it will also create Image objects for rendering neat visualizations.
+
+    Parameters
+    ----------
+    image_path: Path
+        Path to the image folders
+
+    annotation_path: Optional[Path]
+        Path to annotation files
+
+    target_mpp: float
+        The microns per pixel at which the images need to be rendered.
+    """
     slide_image = SlideImage.from_file_path(image_path)
 
     scaling = slide_image.get_scaling(target_mpp)
@@ -119,8 +123,12 @@ def setup(image_path: Path, annotation_path: Optional[Path], target_mpp: float):
 
 
 def compute_itsp_and_render_visualization(
-    image_dataset: Generator, image_canvas: Image, tile_size: tuple, render_images: bool = True
+    image_dataset: Generator[dict[str, Any], int, None],
+    image_canvas: Image,
+    tile_size: tuple[int, int],
+    render_images: bool = True,
 ) -> float:
+    """ """
     total_tumor = 0
     total_stroma = 0
     total_others = 0
@@ -143,12 +151,21 @@ def compute_itsp_and_render_visualization(
 
 
 def itsp_computer(
-    output_path: Path, images_path: Path, inference_path: Path, path_to_anotation_files: Optional[Path], image_format: str, target_mpp: float, tile_size: tuple[int, int], render_images: bool = True
-):
+    output_path: Path,
+    images_path: Path,
+    inference_path: Path,
+    path_to_anotation_files: Optional[Path],
+    image_format: str,
+    target_mpp: float,
+    tile_size: tuple[int, int],
+    render_images: bool = True,
+) -> None:
     if verify_folders(path=images_path, image_format=image_format):
         logger.info(f"Looking into slides from {images_path.name}")
 
-        image_files, annotation_files, tiff_files = get_list_of_files(images_path, image_format, path_to_anotation_files, inference_path)
+        image_files, annotation_files, tiff_files = get_list_of_files(
+            images_path, image_format, path_to_anotation_files, inference_path
+        )
 
         if len(tiff_files) > 0:
             for tiff_file in tiff_files:
@@ -156,7 +173,9 @@ def itsp_computer(
                 image_path = [image_file for image_file in image_files if image_file.stem == slide_id][0]
                 if annotation_files is not None and len(annotation_files) > 0:
                     annotation_path = [
-                        annotation_file for annotation_file in annotation_files if annotation_file.parent.name == slide_id
+                        annotation_file
+                        for annotation_file in annotation_files
+                        if annotation_file.parent.name == slide_id
                     ]
                     logger.info(f"Generating visualizations for: {slide_id}")
                     make_directories_if_needed(folder=images_path, output_path=output_path)

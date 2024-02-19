@@ -3,7 +3,7 @@
 """The setup script."""
 import ast
 
-from setuptools import find_packages, setup  # type: ignore  # noqa
+from setuptools import setup
 
 with open("itsper/__init__.py") as f:
     for line in f:

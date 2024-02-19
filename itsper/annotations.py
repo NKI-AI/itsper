@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Union
 
 from dlup import SlideImage
 from dlup.annotations import WsiAnnotations
+from shapely import Polygon
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import mapping
 
@@ -58,7 +59,7 @@ def offset_and_scale_tumorbed(
     return offset_annotations
 
 
-def to_geojson_format(list_of_points: list, label: str) -> dict[str, Any]:
+def to_geojson_format(list_of_points: list[Polygon], label: str) -> dict[str, Any]:
     """
     Convert a given list of annotations into the GeoJSON standard.
 
@@ -76,7 +77,7 @@ def to_geojson_format(list_of_points: list, label: str) -> dict[str, Any]:
     }
 
     features: List[Any] = []
-    properties: Dict[str, Union[str, Dict[str, str]]] = {
+    properties: Dict[str, Union[str, Dict[str, str | None]]] = {
         "classification": {"name": label, "color": None},
     }
     if len(list_of_points) == 0:

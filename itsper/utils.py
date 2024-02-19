@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
+
 from dlup.annotations import WsiAnnotations
 
 
@@ -30,7 +31,7 @@ def make_csv_entries(tiff_file: Path, output_path: Path, slide_id: str, itsp: fl
 
 
 def verify_folders(path: Path, image_format: str) -> bool:
-    file_list = list(path.glob(f'*.{image_format}'))
+    file_list = list(path.glob(f"*.{image_format}"))
     if len(file_list) > 0:
         return True
     else:
@@ -45,7 +46,7 @@ def make_directories_if_needed(folder: Path, output_path: Path) -> None:
 
 def get_list_of_files(
     image_folder: Path, image_format: str, annotations_folder: Optional[Path | None], tiff_folder: Path
-) -> tuple[list[Path], list[Path], list[Path]]:
+) -> tuple[list[Path], list[Path] | None, list[Path]]:
     paths_to_images = image_folder.glob(f"**/*.{image_format}")
     image_files = [x for x in paths_to_images if x.is_file()]
 

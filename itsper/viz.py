@@ -1,11 +1,13 @@
-from typing import Generator
+from pathlib import Path
+from typing import Any, Generator
 
 import numpy as np
 from PIL import Image, ImageDraw
+
 from itsper.utils import check_if_roi_is_present
 
 
-def colorize(image: Image):
+def colorize(image: Image) -> Image:
     image_array = np.array(image)
 
     # Define your class index to RGBA color map as arrays for vectorized replacement
@@ -14,7 +16,7 @@ def colorize(image: Image):
         0: np.array([0, 0, 0, 255]),  # Background (example)
         1: np.array([0, 255, 0, 255]),  # Stroma - Green
         2: np.array([255, 0, 0, 255]),  # Tumor - Red
-        3: np.array([255, 255, 0, 255])  # Others - Yellow
+        3: np.array([255, 255, 0, 255]),  # Others - Yellow
     }
 
     # Prepare an empty array for the colored image (4 channels for RGBA)
@@ -22,16 +24,18 @@ def colorize(image: Image):
 
     # Apply the color map
     for class_index, color in color_map.items():
-        mask = (image_array == class_index)
+        mask = image_array == class_index
         # Use numpy broadcasting to set the color and alpha
         colored_array[mask] = color
 
     # Convert the NumPy array back to a PIL image in RGBA mode
-    colored_image = Image.fromarray(colored_array, mode='RGBA')
+    colored_image = Image.fromarray(colored_array, mode="RGBA")
     return colored_image
 
 
-def paste_masked_tile_and_draw_polygons(image_canvas, sample, tile_size):
+def paste_masked_tile_and_draw_polygons(
+    image_canvas: Image, sample: dict[str, Any], tile_size: tuple[int, int]
+) -> None:
     original_tile = np.asarray(sample["image"]).astype(np.uint8)
     roi = check_if_roi_is_present(sample)
     if roi is not None:
@@ -57,7 +61,9 @@ def paste_masked_tile_and_draw_polygons(image_canvas, sample, tile_size):
             xy = []
 
 
-def visualize(original_image, prediction_image, tiff_file, output_path, slide_id):
+def visualize(
+    original_image: Image, prediction_image: Image, tiff_file: Path, output_path: Path, slide_id: str
+) -> None:
     viz_image = Image.new(
         "RGBA",
         (original_image.size[0] + prediction_image.size[0] + 5, original_image.size[1] + 30),
@@ -70,12 +76,14 @@ def visualize(original_image, prediction_image, tiff_file, output_path, slide_id
     viz_image.save(str(output_path) + "/" + tiff_file.parent.name + "/" + slide_id + ".png")
 
 
-def render_tumor_bed(image_dataset: Generator, image_canvas: Image, tile_size: tuple) -> None:
+def render_tumor_bed(
+    image_dataset: Generator[dict[str, Any], int, None], image_canvas: Image, tile_size: tuple[int, int]
+) -> None:
     for image_tile in image_dataset:
         paste_masked_tile_and_draw_polygons(image_canvas, image_tile, tile_size)
 
 
-def crop_image(setup_dictionary) -> tuple[Image, Image]:
+def crop_image(setup_dictionary: dict[str, Any]) -> tuple[Image, Image]:
     (x0, y0), (width, height) = setup_dictionary["scaled_annotations"].bounding_box
     original_tumor_bed = setup_dictionary["original_image_canvas"].crop((x0, y0, (x0 + width), (y0 + height)))
     prediciton_tumor_bed = setup_dictionary["prediction_image_canvas"].crop(

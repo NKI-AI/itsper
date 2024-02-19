@@ -4,7 +4,7 @@ from pathlib import Path
 from itsper.compute_itsp import itsp_computer
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Compute ITSP over segmentation masks")
     parser.add_argument("--output-path", required=True, help="Path to save output images")
     parser.add_argument("--images-path", required=True, help="Path to input images")
@@ -29,7 +29,13 @@ def main():
     image_format = args.image_format
 
     itsp_computer(
-        output_path, images_path, inference_path, annotation_path, image_format, native_mpp_for_inference, tile_size_for_inference
+        output_path,
+        images_path,
+        inference_path,
+        annotation_path,
+        image_format,
+        native_mpp_for_inference,
+        tile_size_for_inference,
     )
 
 

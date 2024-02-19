@@ -91,4 +91,4 @@ target-version = "py310"
 max-complexity = 10
 
 [tool.mypy]
-ignore_missing_imports = True
+ignore_missing_imports = true
