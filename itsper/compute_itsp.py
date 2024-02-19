@@ -89,7 +89,7 @@ def setup(image_path: Path, annotation_path: Optional[list[Path] | None], target
     scaled_offset, scaled_bounds = slide_image.get_scaled_slide_bounds(scaling)
     scaled_image_size = slide_image.get_scaled_size(scaling)
 
-    if annotation_path is not None:
+    if len(annotation_path) > 0:
         annotations = WsiAnnotations.from_geojson(annotation_path, scaling=1.0)
         offset_annotations = offset_and_scale_tumorbed(slide_image, annotations)
 
@@ -171,14 +171,15 @@ def itsp_computer(
             for tiff_file in tiff_files:
                 slide_id = tiff_file.stem
                 image_path = [image_file for image_file in image_files if image_file.stem == slide_id][0]
-                if annotation_files is not None and len(annotation_files) > 0:
+                if annotation_files is not None:
                     annotation_path = [
                         annotation_file
                         for annotation_file in annotation_files
                         if annotation_file.parent.name == slide_id
                     ]
-                    logger.info(f"Generating visualizations for: {slide_id}")
-                    make_directories_if_needed(folder=images_path, output_path=output_path)
+                    if len(annotation_path) > 0:
+                        logger.info(f"Generating visualizations for: {slide_id}")
+                        make_directories_if_needed(folder=images_path, output_path=output_path)
                 else:
                     logger.info(f"{slide_id} has no tumorbed annotation.")
                     annotation_path = None
@@ -238,7 +239,7 @@ def itsp_computer(
                 )
                 logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
 
-                if annotation_files is not None:
+                if len(annotation_path) > 0:
                     render_tumor_bed(image_dataset, setup_dictionary["original_image_canvas"], tile_size=tile_size)
                     original_tumor_bed, prediction_tumor_bed = crop_image(setup_dictionary)
                     visualize(
