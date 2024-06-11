@@ -1,17 +1,14 @@
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Union
+from itsper.types import ItsperAnnotationTypes
 
 from dlup import SlideImage
-from dlup.annotations import WsiAnnotations
-from shapely import Polygon
+from dlup.annotations import WsiAnnotations, SingleAnnotationWrapper, AnnotationType, AnnotationClass
+from shapely import Polygon, Point
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import mapping
 
 
-def offset_and_scale_tumorbed(
-    slide_image: SlideImage, annotations: WsiAnnotations, native_mpp_at_inference: float = 1.0
-) -> WsiAnnotations:
+def offset_and_scale_tumorbed(annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0) -> WsiAnnotations:
     """
     Apply an appropriate scaling and translation to the tumorbed annotations.
 
@@ -24,39 +21,60 @@ def offset_and_scale_tumorbed(
 
     And return the rescaled, corrected annotations using WsiAnnotations from dlup.
 
-    Parameters
-    ----------
-    slide_image: SlideImage
-        The pathology slide
-
-    annotations: WsiAnnotations
-        The full annotations at the base resolution
-
-    native_mpp_at_inference: float
-        The base resolution of the inference file.
-
     Returns
     -------
     offset_annotations: WsiAnnotations
         Annotations on the WSI rescaled to match the tiff image resolution.
     """
+    single_annotations: list[SingleAnnotationWrapper] = []
+    annotation_class = annotations.available_labels
     slide_offset, _ = slide_image.slide_bounds
-    scaling_to_native_mpp_at_inference = slide_image.get_scaling(native_mpp_at_inference)
-    polygons = annotations.read_region((0, 0), scaling=native_mpp_at_inference, size=slide_image.size)
-    translated_polygons = []
-    affine_transform_polygons = []
-    for polygon in polygons:
-        translated_polygons.append(translate(polygon, -slide_offset[0], -slide_offset[1]))
+    scaling_to_native_mpp_at_inference = slide_image.get_scaling(native_mpp_for_inference)
     transformation_matrix = [scaling_to_native_mpp_at_inference, 0, 0, scaling_to_native_mpp_at_inference, 0, 0]
-    for polygon in translated_polygons:
-        affine_transform_polygons.append(affine_transform(polygon, transformation_matrix))
-    final_polygons = to_geojson_format(affine_transform_polygons, label="Tumorbed")
-    slide_name = slide_image.identifier.split("/")[-1].split(".mrxs")[0]
-    with open(f"{slide_name}_Tumorbed.json", "w") as file:
-        json.dump(final_polygons, file, indent=2)
-    offset_annotations = WsiAnnotations.from_geojson(f"{slide_name}_Tumorbed.json")
-    Path(f"{slide_name}_Tumorbed.json").unlink()
+    polygons = annotations.read_region((0, 0), scaling=native_mpp_for_inference, size=slide_image.size)
+    for ann_class, polygon in zip(annotation_class, polygons):
+        translated_polygon = translate(polygon, -slide_offset[0], -slide_offset[1])
+        transformed_polygon = affine_transform(translated_polygon, transformation_matrix)
+        single_annotations.append(SingleAnnotationWrapper(ann_class, [transformed_polygon]))
+    offset_annotations = WsiAnnotations(single_annotations)
     return offset_annotations
+
+
+def get_most_invasive_region(annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0):
+    if len(annotations.available_labels) == 0:
+        raise ValueError(f"No most invasive regions found for {slide_image.identifier}!.")
+    if len(annotations.available_labels) > 1:
+        raise ValueError(f"More than one most invasive regions found in the annotations for {slide_image.identifier}.")
+
+    most_invasive_region: list[SingleAnnotationWrapper] = []
+    offset_most_invasive_region: list[SingleAnnotationWrapper] = []
+
+    annotation_class = AnnotationClass
+    annotation_class.a_cls = AnnotationType.POLYGON
+    annotation_class.label = ItsperAnnotationTypes.MI_REGION
+
+    slide_offset, _ = slide_image.slide_bounds
+    scaling_to_native_mpp_at_inference = slide_image.get_scaling(native_mpp_for_inference)
+    transformation_matrix = [scaling_to_native_mpp_at_inference, 0, 0, scaling_to_native_mpp_at_inference, 0, 0]
+
+    mi = annotations.read_region((0, 0), scaling=1.0, size=slide_image.size)
+
+    if annotations.available_labels[0].a_cls == AnnotationType.POINT:
+        center_x = mi[0].x
+        center_y = mi[0].y
+    else:
+        raise ValueError(f"Most invasive region is not a point annotation for {slide_image.identifier}.")
+
+    center = Point(center_x, center_y)
+    # We fix the radius of the circle to 1.05mm following the Leiden protocol.
+    radius = 1.05 * 10e-3 / (slide_image.mpp * 10e-6)
+    # Create a circle polygon from the center point with the calculated radius
+    most_invasive_region.append(SingleAnnotationWrapper(annotation_class, [center.buffer(radius)]))
+
+    translated_most_invasive_region = translate(center.buffer(radius), -slide_offset[0], -slide_offset[1])
+    transformed_most_invasive_region = affine_transform(translated_most_invasive_region, transformation_matrix)
+    offset_most_invasive_region.append(SingleAnnotationWrapper(annotation_class, [transformed_most_invasive_region]))
+    return WsiAnnotations(most_invasive_region), WsiAnnotations(offset_most_invasive_region)
 
 
 def to_geojson_format(list_of_points: list[Polygon], label: str) -> dict[str, Any]:
