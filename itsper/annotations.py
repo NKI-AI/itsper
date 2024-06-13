@@ -1,14 +1,17 @@
 from typing import Any, Dict, List, Union
-from itsper.types import ItsperAnnotationTypes
 
 from dlup import SlideImage
-from dlup.annotations import WsiAnnotations, SingleAnnotationWrapper, AnnotationType, AnnotationClass
-from shapely import Polygon, Point
+from dlup.annotations import AnnotationClass, AnnotationType, SingleAnnotationWrapper, WsiAnnotations
+from shapely import Point, Polygon
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import mapping
 
+from itsper.types import ItsperAnnotationTypes
 
-def offset_and_scale_tumorbed(annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0) -> WsiAnnotations:
+
+def offset_and_scale_tumorbed(
+    annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0
+) -> WsiAnnotations:
     """
     Apply an appropriate scaling and translation to the tumorbed annotations.
 
@@ -40,7 +43,9 @@ def offset_and_scale_tumorbed(annotations: WsiAnnotations, slide_image: SlideIma
     return offset_annotations
 
 
-def get_most_invasive_region(annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0):
+def get_most_invasive_region(
+    annotations: WsiAnnotations, slide_image: SlideImage, native_mpp_for_inference: float = 1.0
+) -> tuple[WsiAnnotations, WsiAnnotations]:
     if len(annotations.available_labels) == 0:
         raise ValueError(f"No most invasive regions found for {slide_image.identifier}!.")
     if len(annotations.available_labels) > 1:

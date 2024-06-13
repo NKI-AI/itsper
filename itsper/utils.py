@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from dlup.annotations import WsiAnnotations
-from itsper.types import ItsperWsiExtensions, ItsperAnnotationExtensions, ItsperInferenceExtensions
+
+from itsper.types import ItsperAnnotationExtensions, ItsperInferenceExtensions, ItsperWsiExtensions
 
 
 def make_csv(output_path: Path) -> None:
@@ -22,7 +23,9 @@ def check_if_roi_is_present(sample: dict[str, Any]) -> WsiAnnotations | None:
     return roi
 
 
-def make_csv_entries(inference_file: Path, output_path: Path, slide_id: str, human_itsp: float, ai_itsp: float) -> None:
+def make_csv_entries(
+    inference_file: Path, output_path: Path, slide_id: str, human_itsp: Optional[float], ai_itsp: float
+) -> None:
     slide_details = [inference_file.parent.name, slide_id, str(human_itsp), str(ai_itsp)]
 
     csv_file_path = output_path / Path("slide_details.csv")
@@ -45,16 +48,16 @@ def get_list_of_files(folder_dictionary: dict[str, Any]) -> tuple[list[Path], li
     annotations_folder = folder_dictionary.get("annotations_path", None)
     annotations_format = folder_dictionary.get("annotation_format", None)
 
-    paths_to_images = images_path.glob(f"**/*.{image_format}")
+    paths_to_images = images_path.glob(f"*{ItsperWsiExtensions(image_format).value}")
     image_files = [x for x in paths_to_images if x.is_file()]
 
     if annotations_folder is not None:
-        paths_to_annotation = annotations_folder.glob(f"**/*.{annotations_format.value}")
+        paths_to_annotation = annotations_folder.glob(f"**/*{ItsperAnnotationExtensions(annotations_format).value}")
         annotation_files = [x for x in paths_to_annotation if x.is_file()]
     else:
         annotation_files = None
 
-    paths_to_inference = inference_folder.glob(f"**/*.{inference_format}")
+    paths_to_inference = inference_folder.glob(f"**/*.{ItsperInferenceExtensions(inference_format).value}")
     inference_files = [x for x in paths_to_inference if x.is_file()]
 
     return image_files, annotation_files, inference_files
@@ -62,66 +65,59 @@ def get_list_of_files(folder_dictionary: dict[str, Any]) -> tuple[list[Path], li
 
 def get_image_format(images_path: Path) -> ItsperWsiExtensions:
     # Create a dictionary to store the files for each format in the enum
-    images_dict = {format.value: list(images_path.glob(f"*{format.value}")) for format in ItsperWsiExtensions}
+    images_dict = {format: list(images_path.glob(f"**/*{format.value}")) for format in ItsperWsiExtensions}
     # Filter out the formats where no files were found
     valid_images = {format: files for format, files in images_dict.items() if files}
-    if len(list(valid_images.keys())) > 1:
+    if len(valid_images) > 1:
         # More than one image format found, raise an error
-        raise ValueError(f"Multiple image formats found: {', '.join([format.name for format in valid_images.keys()])}")
-    elif len(list(valid_images.keys())) == 0:
+        raise ValueError(f"Multiple image formats found: {', '.join([format.name for format in valid_images])}")
+    elif len(valid_images) == 0:
         # No image formats found, raise an error
         raise ValueError("No recognized image formats found.")
     else:
         # Exactly one image format found, return it
-        return ItsperWsiExtensions(list(valid_images.keys())[0])
+        return next(iter(valid_images))
 
 
-def get_annotation_format(path_to_anotation_files: Path) -> ItsperAnnotationExtensions:
+def get_annotation_format(path_to_annotation_files: Path) -> ItsperAnnotationExtensions:
     # Create a dictionary to store the files for each format in the enum
     annotation_dict = {
-        format.value: list(path_to_anotation_files.glob(f"**/*{format.value}"))
-        for format in ItsperAnnotationExtensions
+        format: list(path_to_annotation_files.glob(f"**/*{format.value}")) for format in ItsperAnnotationExtensions
     }
     # Filter out the formats where no files were found
-    valid_annotations = {
-        format: files for format, files in annotation_dict.items() if files
-    }
-    if len(list(valid_annotations.keys())) > 1:
+    valid_annotations = {format: files for format, files in annotation_dict.items() if files}
+    if len(valid_annotations) > 1:
         # More than one annotation format found, raise an error
         raise ValueError(
-            f"Multiple annotation formats found: {', '.join([format.name for format in valid_annotations.keys()])}"
+            f"Multiple annotation formats found: {', '.join([format.name for format in valid_annotations])}"
         )
-    elif len(list(valid_annotations.keys())) == 0:
+    elif len(valid_annotations) == 0:
         # No annotation formats found, raise an error
         raise ValueError("No recognized annotation formats found.")
     else:
         # Exactly one annotation format found, return it
-        return ItsperAnnotationExtensions(list(valid_annotations.keys())[0])
+        return next(iter(valid_annotations))
 
 
 def get_inference_image_format(inference_path: Path) -> ItsperInferenceExtensions:
     # Create a dictionary to store the files for each format in the enum
-    inference_dict = {
-        format.value: list(inference_path.glob(f"*{format.value}")) for format in ItsperInferenceExtensions
-    }
+    inference_dict = {format: list(inference_path.glob(f"**/*{format.value}")) for format in ItsperInferenceExtensions}
     # Filter out the formats where no files were found
-    valid_inference = {
-        format: files for format, files in inference_dict.items() if files
-    }
-    if len(list(valid_inference.keys())) > 1:
+    valid_inference = {format: files for format, files in inference_dict.items() if files}
+    if len(valid_inference) > 1:
         # More than one inference format found, raise an error
-        raise ValueError(
-            f"Multiple inference formats found: {', '.join([format.name for format in valid_inference.keys()])}"
-        )
-    elif len(list(valid_inference.keys())) == 0:
+        raise ValueError(f"Multiple inference formats found: {', '.join([format.name for format in valid_inference])}")
+    elif len(valid_inference) == 0:
         # No inference formats found, raise an error
         raise ValueError("No recognized inference formats found.")
     else:
         # Exactly one inference format found, return it
-        return ItsperInferenceExtensions(list(valid_inference.keys())[0])
+        return next(iter(valid_inference))
 
 
-def check_integrity_of_files(images_path: Path, inference_path: Path, annotations_path: Optional[Path]) -> dict[str, Any]:
+def check_integrity_of_files(
+    images_path: Path, inference_path: Path, annotations_path: Optional[Path]
+) -> dict[str, Any]:
     image_format = get_image_format(images_path)
     if annotations_path is not None:
         annotation_format = get_annotation_format(annotations_path)
@@ -129,10 +125,12 @@ def check_integrity_of_files(images_path: Path, inference_path: Path, annotation
         annotation_format = None
     inference_image_format = get_inference_image_format(inference_path)
 
-    folder_dictionary = {"images_path": images_path,
-                         "annotations_path": annotations_path,
-                         "inference_path": inference_path,
-                         "image_format": image_format,
-                         "annotation_format": annotation_format,
-                         "inference_image_format": inference_image_format}
+    folder_dictionary = {
+        "images_path": images_path,
+        "annotations_path": annotations_path,
+        "inference_path": inference_path,
+        "image_format": image_format,
+        "annotation_format": annotation_format,
+        "inference_image_format": inference_image_format,
+    }
     return folder_dictionary
