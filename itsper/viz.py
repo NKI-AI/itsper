@@ -1,10 +1,64 @@
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
+import PIL
 from PIL import Image, ImageDraw
 
+from itsper.types import ItsperAnnotationTypes
 from itsper.utils import check_if_roi_is_present
+
+# TODO: Make this configurable
+TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
+STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
+OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")
+
+
+def plot_2d(
+    image: PIL.Image.Image,
+    mask: npt.NDArray[np.int_] | None = None,
+    mask_colors: dict[int, str] | None = None,
+    mask_alpha: int = 70,
+) -> PIL.Image.Image:
+    """
+    Plotting utility to overlay masks and geometries (Points, Polygons) on top of the image.
+
+    Parameters
+    ----------
+    image : PIL.Image
+    mask : np.ndarray
+        Integer array
+    mask_colors : dict
+        A dictionary mapping the integer value of the mask to a PIL color value.
+    mask_alpha : int
+        Value between 0-100 defining the transparency of the overlays
+
+    Returns
+    -------
+    PIL.Image
+    """
+    image = image.convert("RGBA")
+
+    if mask is not None:
+        if mask_colors is None:
+            raise ValueError("mask_colors must be defined if mask is defined.")
+        # Get unique values
+        unique_vals = sorted(list(np.unique(mask)))
+        for idx in unique_vals:
+            if idx == 0:
+                continue
+            color = PIL.ImageColor.getcolor(mask_colors[idx], "RGBA")
+            curr_mask = PIL.Image.fromarray(((mask == idx)[..., np.newaxis] * color).astype(np.uint8), mode="RGBA")
+            alpha_channel = PIL.Image.fromarray(
+                ((mask == idx) * int(mask_alpha * 255 / 100)).astype(np.uint8), mode="L"
+            )
+            curr_mask.putalpha(alpha_channel)
+            image = PIL.Image.alpha_composite(image.copy(), curr_mask.copy()).copy()
+
+    return image.convert("RGB")
 
 
 def colorize(image: Image) -> Image:
@@ -61,9 +115,16 @@ def paste_masked_tile_and_draw_polygons(
             xy = []
 
 
-def visualize(
-    original_image: Image, prediction_image: Image, tiff_file: Path, output_path: Path, slide_id: str
+def plot_tb_vizualization(
+    original_image: Image,
+    prediction_image: Image,
+    inference_file: Path,
+    human_itsp_score: Optional[float],
+    ai_itsp_score: float,
+    output_path: Path,
+    slide_id: str,
 ) -> None:
+    # TODO: Print ITSP scores on the images.
     viz_image = Image.new(
         "RGBA",
         (original_image.size[0] + prediction_image.size[0] + 5, original_image.size[1] + 30),
@@ -73,7 +134,38 @@ def visualize(
     viz_image.paste(prediction_image, (original_image.size[0] + 5, 0))
 
     viz_image.convert("RGB")
-    viz_image.save(str(output_path) + "/" + tiff_file.parent.name + "/" + slide_id + ".png")
+    viz_image.save(str(output_path) + "/" + inference_file.parent.name + "/" + slide_id + ".png")
+
+
+def plot_mi_visualization(
+    wsi_viz: Image,
+    pred_viz: Image,
+    setup_dictionary: dict[str, Any],
+    ai_itsp_score: float,
+    output_path: Path,
+    images_path: Path,
+    slide_id: str,
+    human_itsp_score: Optional[float] = None,
+) -> None:
+    x0, y0, x1, y1 = setup_dictionary["scaled_annotation_bounds"]
+    if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
+        draw_fov = ImageDraw.Draw(wsi_viz)
+        draw_fov.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.set_figheight(40)
+    fig.set_figwidth(100)
+    ax1.imshow(wsi_viz.crop((x0, y0, x1, y1)))
+    if human_itsp_score:
+        ax1.text(50, 20, f"Human score:{human_itsp_score} %", fontsize=70, backgroundcolor="white")
+    ax2.imshow(pred_viz.crop((x0, y0, x1, y1)))
+    ax2.text(50, 20, f"AI score:{ai_itsp_score} %", fontsize=70, backgroundcolor="white")
+    ax1.set_xticks([])
+    ax2.set_xticks([])
+    ax1.set_yticks([])
+    ax2.set_yticks([])
+    fig.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=70, loc="upper right")
+    plt.savefig(f"{output_path}/{images_path.name}/{slide_id}.png", dpi=300)
+    plt.close(fig)
 
 
 def render_tumor_bed(
@@ -83,10 +175,12 @@ def render_tumor_bed(
         paste_masked_tile_and_draw_polygons(image_canvas, image_tile, tile_size)
 
 
-def crop_image(setup_dictionary: dict[str, Any]) -> tuple[Image, Image]:
+def crop_image(
+    wsi_background: Image, prediction_background: Image, setup_dictionary: dict[str, Any]
+) -> tuple[Image, Image]:
     (x0, y0), (width, height) = setup_dictionary["scaled_annotations"].bounding_box
-    original_tumor_bed = setup_dictionary["original_image_canvas"].crop((x0, y0, (x0 + width), (y0 + height)))
-    prediciton_tumor_bed = setup_dictionary["prediction_image_canvas"].crop(
+    original_tumor_bed = wsi_background.crop((x0, y0, (x0 + width), (y0 + height)))
+    prediciton_tumor_bed = prediction_background.crop(
         (
             x0 - setup_dictionary["scaled_offset"][0],
             y0 - setup_dictionary["scaled_offset"][1],
