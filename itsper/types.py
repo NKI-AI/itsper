@@ -1,6 +1,16 @@
 from enum import Enum
 
 
+class ItsperClassIndices(int, Enum):
+    """
+    Enum class for the different colors used in the ITSP AI.
+    """
+
+    STROMA = 1
+    TUMOR = 2
+    OTHERS = 3
+
+
 class ItsperAnnotationTypes(str, Enum):
     """
     Enum class for the different types of annotations that the ITSP AI can generate.
