@@ -6,15 +6,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import PIL
+from numpy._typing import NDArray
 from PIL import Image, ImageDraw
 
-from itsper.types import ItsperAnnotationTypes
-from itsper.utils import check_if_roi_is_present
+from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
 
 # TODO: Make this configurable
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
 OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")
+Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 
 
 def plot_2d(
@@ -87,35 +88,44 @@ def colorize(image: Image) -> Image:
     return colored_image
 
 
-def paste_masked_tile_and_draw_polygons(
-    image_canvas: Image, sample: dict[str, Any], tile_size: tuple[int, int]
-) -> None:
-    original_tile = np.asarray(sample["image"]).astype(np.uint8)
-    roi = check_if_roi_is_present(sample)
-    if roi is not None:
-        roi_expanded = np.expand_dims(roi, axis=-1)
-        roi_expanded = np.repeat(roi_expanded, 3, axis=2)
-        tile = original_tile[:, :, :3] * roi_expanded
-        tile[roi_expanded == 0] = 255
-        tile = Image.fromarray(tile.astype(np.uint8))
-    else:
-        tile = Image.fromarray(original_tile)
-    coords = np.array(sample["coordinates"])
-    box = tuple(np.array((*coords, *(coords + tile_size))).astype(int))
-    image_canvas.paste(tile, box)
-    original_drawer = ImageDraw.Draw(image_canvas)
-    xy = []
-    if sample["annotations"] is not None:
-        for polygon in sample["annotations"]:
-            x, y = polygon.exterior.xy
-            for x_coord, y_coord in zip(x, y):
-                xy.append(x_coord + sample["coordinates"][0])
-                xy.append(y_coord + sample["coordinates"][1])
-            original_drawer.polygon(xy, outline="black")
-            xy = []
+def render_visualization(
+    image_dataset: Generator[dict[str, Any], int, None],
+    prediction_dataset: Generator[dict[str, Any], int, None],
+    tile_size: tuple[int, int],
+    wsi_background: Image,
+    prediction_background: Image,
+) -> tuple[Image, Image]:
+    for wsi_sample, prediction_sample in zip(image_dataset, prediction_dataset):
+        coords = np.array(wsi_sample["coordinates"])
+        box = tuple(np.array((*coords, *(coords + tile_size))).astype(int))
+        roi = prediction_sample["annotation_data"]["roi"]
+        prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=roi)
+        prediction_tile = np.where(prediction_tile == 0, 255, prediction_tile)
+        wsi_tile = np.asarray(wsi_sample["image"]) * roi[:, :, np.newaxis]
+        wsi_tile = np.where(wsi_tile == 0, 255, wsi_tile)
+        prediction_sample_viz = plot_2d(
+            Image.fromarray(prediction_tile),
+            mask=prediction_tile * roi,
+            mask_colors={1: "green", 2: "red", 3: "yellow"},
+        )
+        prediction_background.paste(prediction_sample_viz, box)
+        wsi_background.paste(Image.fromarray(wsi_tile.astype(np.uint8)), box)
+        wsi_drawer = ImageDraw.Draw(wsi_background)
+        prediction_drawer = ImageDraw.Draw(prediction_background)
+        xy = []
+        if wsi_sample["annotations"] and prediction_sample["annotations"] is not None:
+            for polygon in wsi_sample["annotations"]:
+                x, y = polygon.exterior.xy
+                for x_coord, y_coord in zip(x, y):
+                    xy.append(x_coord + wsi_sample["coordinates"][0])
+                    xy.append(y_coord + wsi_sample["coordinates"][1])
+                wsi_drawer.polygon(xy, outline="black")
+                prediction_drawer.polygon(xy, outline="black")
+                xy = []
+    return wsi_background, prediction_background
 
 
-def plot_tb_vizualization(
+def plot_visualization(
     original_image: Image,
     prediction_image: Image,
     inference_file: Path,
@@ -123,69 +133,77 @@ def plot_tb_vizualization(
     ai_itsp_score: float,
     output_path: Path,
     slide_id: str,
+    vizualization_type: ItsperAnnotationTypes,
 ) -> None:
-    # TODO: Print ITSP scores on the images.
+    if vizualization_type == ItsperAnnotationTypes.MI_REGION:
+        extra_space = 1300
+    else:
+        extra_space = 2500
+    # Create a new image with space for the two images and additional text
     viz_image = Image.new(
         "RGBA",
-        (original_image.size[0] + prediction_image.size[0] + 5, original_image.size[1] + 30),
+        (original_image.size[0] + prediction_image.size[0] + extra_space, original_image.size[1] + 10),
         (255, 255, 255, 255),
     )
+
+    # Paste the original and prediction images into the new image
     viz_image.paste(original_image, (0, 0))
-    viz_image.paste(prediction_image, (original_image.size[0] + 5, 0))
+    viz_image.paste(prediction_image, (original_image.size[0] + 50, 0))
 
-    viz_image.convert("RGB")
-    viz_image.save(str(output_path) + "/" + inference_file.parent.name + "/" + slide_id + ".png")
+    # Convert to RGB (removing alpha channel)
+    viz_image = viz_image.convert("RGB")
 
+    # Save the visualization image
+    output_file_path = output_path / inference_file.parent.name / f"{slide_id}.png"
+    output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-def plot_mi_visualization(
-    wsi_viz: Image,
-    pred_viz: Image,
-    setup_dictionary: dict[str, Any],
-    ai_itsp_score: float,
-    output_path: Path,
-    images_path: Path,
-    slide_id: str,
-    human_itsp_score: Optional[float] = None,
-) -> None:
-    x0, y0, x1, y1 = setup_dictionary["scaled_annotation_bounds"]
-    if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
-        draw_fov = ImageDraw.Draw(wsi_viz)
-        draw_fov.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    fig.set_figheight(40)
-    fig.set_figwidth(100)
-    ax1.imshow(wsi_viz.crop((x0, y0, x1, y1)))
+    plt.imshow(viz_image)
+    plt.yticks([])
+    plt.xticks([])
+    font_size = max(10, min(plt.xlim()[1], plt.xlim()[0]) // 20)
     if human_itsp_score:
-        ax1.text(50, 20, f"Human score:{human_itsp_score} %", fontsize=70, backgroundcolor="white")
-    ax2.imshow(pred_viz.crop((x0, y0, x1, y1)))
-    ax2.text(50, 20, f"AI score:{ai_itsp_score} %", fontsize=70, backgroundcolor="white")
-    ax1.set_xticks([])
-    ax2.set_xticks([])
-    ax1.set_yticks([])
-    ax2.set_yticks([])
-    fig.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=70, loc="upper right")
-    plt.savefig(f"{output_path}/{images_path.name}/{slide_id}.png", dpi=300)
-    plt.close(fig)
-
-
-def render_tumor_bed(
-    image_dataset: Generator[dict[str, Any], int, None], image_canvas: Image, tile_size: tuple[int, int]
-) -> None:
-    for image_tile in image_dataset:
-        paste_masked_tile_and_draw_polygons(image_canvas, image_tile, tile_size)
+        plt.text(50, 0, f"Human score:{human_itsp_score} %", fontsize=font_size)
+    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{ai_itsp_score} %", fontsize=font_size)
+    plt.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=font_size, loc="upper right")
+    plt.savefig(output_file_path, dpi=300)
+    plt.close()
 
 
 def crop_image(
     wsi_background: Image, prediction_background: Image, setup_dictionary: dict[str, Any]
 ) -> tuple[Image, Image]:
-    (x0, y0), (width, height) = setup_dictionary["scaled_annotations"].bounding_box
-    original_tumor_bed = wsi_background.crop((x0, y0, (x0 + width), (y0 + height)))
-    prediciton_tumor_bed = prediction_background.crop(
-        (
-            x0 - setup_dictionary["scaled_offset"][0],
-            y0 - setup_dictionary["scaled_offset"][1],
-            (x0 - setup_dictionary["scaled_offset"][0] + width),
-            (y0 - setup_dictionary["scaled_offset"][1] + height),
-        )
-    )
+    x0, y0, x1, y1 = setup_dictionary["scaled_annotation_bounds"]
+    if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
+        draw_fov = ImageDraw.Draw(wsi_background)
+        draw_fov.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
+    original_tumor_bed = wsi_background.crop((x0, y0, x1, y1))
+    prediciton_tumor_bed = prediction_background.crop((x0, y0, x1, y1))
     return original_tumor_bed, prediciton_tumor_bed
+
+
+def assign_index_to_pixels(image: Image, roi: Optional[NDArray[np.float_]] = None) -> NDArray[np.uint8]:
+    """
+    Convert RGB pixel values to indices based on target colors.
+    """
+    valid_indices = [ItsperClassIndices.STROMA.value, ItsperClassIndices.TUMOR.value, ItsperClassIndices.OTHERS.value]
+    image = np.array(image)
+    # Assuming image is a NumPy array of shape (height, width, 4) and roi of shape (height, width)
+    target_colors = np.array([[0, 128, 0, 255], [255, 0, 0, 255], [255, 255, 0, 255]])  # green  # red  # yellow
+
+    # Calculate the difference between each pixel and the target colors
+    diff = np.linalg.norm(image[:, :, None, :] - target_colors[None, None, :, :], axis=3)
+
+    # Find the index of the minimum difference for each pixel
+    indexed_image = np.argmin(diff, axis=2) + 1  # Add 1 to match your 1-based indexing
+
+    # Check for any pixel that doesn't match any target color exactly and raise an error
+    if not np.all(np.isin(indexed_image, valid_indices)):
+        raise ValueError("Unknown color detected in the image.")
+
+    if roi is not None:
+        # Apply the ROI mask
+        indexed_image = indexed_image * roi
+
+    indexed_image = indexed_image.astype(np.uint8)
+
+    return indexed_image  # type: ignore[no-any-return]

@@ -23,11 +23,7 @@ from itsper.utils import (
     make_csv_entries,
     make_directories_if_needed,
 )
-from itsper.viz import colorize, crop_image, plot_2d, plot_mi_visualization, plot_tb_vizualization, render_tumor_bed
-
-# TODO: Feels hacky. Need to find a better way to handle this.
-Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
-COLOR_MAP = {"green": 1, "red": 2, "yellow": 3}
+from itsper.viz import assign_index_to_pixels, colorize, crop_image, plot_visualization, render_visualization
 
 logger = get_logger(__name__)
 
@@ -44,34 +40,6 @@ def get_class_pixels(
     other_mask = (curr_mask == 3).astype(np.uint8)
     roi = sample["annotation_data"]["roi"]
     return curr_mask, stroma_mask, tumor_mask, other_mask, roi
-
-
-def assign_index_to_pixels(image: Image, roi: Optional[NDArray[np.float_]] = None) -> NDArray[np.uint8]:
-    """
-    Convert RGB pixel values to indices based on target colors.
-    """
-    valid_indices = [1, 2, 3]
-    image = np.array(image)
-    # Assuming image is a NumPy array of shape (height, width, 4) and roi of shape (height, width)
-    target_colors = np.array([[0, 128, 0, 255], [255, 0, 0, 255], [255, 255, 0, 255]])  # green  # red  # yellow
-
-    # Calculate the difference between each pixel and the target colors
-    diff = np.linalg.norm(image[:, :, None, :] - target_colors[None, None, :, :], axis=3)
-
-    # Find the index of the minimum difference for each pixel
-    indexed_image = np.argmin(diff, axis=2) + 1  # Add 1 to match your 1-based indexing
-
-    # Check for any pixel that doesn't match any target color exactly and raise an error
-    if not np.all(np.isin(indexed_image, valid_indices)):
-        raise ValueError("Unknown color detected in the image.")
-
-    if roi is not None:
-        # Apply the ROI mask
-        indexed_image = indexed_image * roi
-
-    indexed_image = indexed_image.astype(np.uint8)
-
-    return indexed_image  # type: ignore[no-any-return]
 
 
 def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: float) -> dict[str, Any]:
@@ -94,10 +62,8 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
 
     slide_image = SlideImage.from_file_path(image_path, internal_handler="pil")
     scaling = slide_image.get_scaling(native_mpp_for_inference)
-    scaled_offset, scaled_bounds = slide_image.get_scaled_slide_bounds(scaling)
     scaled_image_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path, scaling=1.0)
-    scaled_annotation = WsiAnnotations.from_geojson(annotation_path, scaling=scaling)
     available_labels = annotations.available_labels
     for a_class in available_labels:
         if a_class.label == ItsperAnnotationTypes.TUMORBED:
@@ -116,12 +82,9 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     setup_dict = {
         "slide_image": slide_image,
         "scaling": scaling,
-        "scaled_offset": scaled_offset,
-        "scaled_bounds": scaled_bounds,
         "scaled_image_size": scaled_image_size,
         "annotations": annotations,
         "offset_annotations": offset_annotations,
-        "scaled_annotations": scaled_annotation,
         "scaled_annotation_bounds": scaled_annotation_bounds,
         "transform": transform,
         "annotation_type": a_type,
@@ -147,31 +110,6 @@ def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> float
     itsp = (total_stroma * 100) / (total_stroma + total_tumor)
     itsp = round(itsp, 2)
     return itsp
-
-
-def render_mi_visualizations(
-    image_dataset: Generator[dict[str, Any], int, None],
-    prediction_dataset: Generator[dict[str, Any], int, None],
-    tile_size: tuple[int, int],
-    wsi_background: Image,
-    prediction_background: Image,
-) -> tuple[Image, Image]:
-    for wsi_sample, prediction_sample in zip(image_dataset, prediction_dataset):
-        coords = np.array(wsi_sample["coordinates"])
-        box = tuple(np.array((*coords, *(coords + tile_size))).astype(int))
-        roi = prediction_sample["annotation_data"]["roi"]
-        prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=roi)
-        prediction_tile = np.where(prediction_tile == 0, 255, prediction_tile)
-        wsi_tile = np.asarray(wsi_sample["image"]) * roi[:, :, np.newaxis]
-        wsi_tile = np.where(wsi_tile == 0, 255, wsi_tile)
-        prediction_sample_viz = plot_2d(
-            Image.fromarray(prediction_tile),
-            mask=prediction_tile * roi,
-            mask_colors={1: "green", 2: "red", 3: "yellow"},
-        )
-        prediction_background.paste(prediction_sample_viz, box)
-        wsi_background.paste(Image.fromarray(wsi_tile.astype(np.uint8)), box)
-    return wsi_background, prediction_background
 
 
 def itsp_computer(
@@ -266,7 +204,7 @@ def itsp_computer(
         itsp = get_itsp_score(prediction_slide_dataset)
         logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
         if render_images:
-            slide_image = image_dataset.slide_image
+            slide_image = setup_dictionary["slide_image"]
             scaled_region_view = slide_image.get_scaled_view(slide_image.get_scaling(native_mpp_for_inference))
             wsi_background = Image.new("RGBA", scaled_region_view.size, (255, 255, 255, 255))
             prediction_background = Image.new("RGBA", scaled_region_view.size, (255, 255, 255, 255))
@@ -277,35 +215,20 @@ def itsp_computer(
                 ].item()
             else:
                 logger.info("No human scores found. So, not rendering human scores.")
-            if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
-                wsi_viz, pred_viz = render_mi_visualizations(
-                    image_dataset, prediction_slide_dataset, tile_size, wsi_background, prediction_background
-                )
-                plot_mi_visualization(
-                    wsi_viz,
-                    pred_viz,
-                    setup_dictionary,
-                    itsp,
-                    output_path,
-                    images_path,
-                    slide_id,
-                    human_itsp_score=human_itsp_score,
-                )
-            elif setup_dictionary["annotation_type"] == ItsperAnnotationTypes.TUMORBED:
-                render_tumor_bed(prediction_slide_dataset, image_canvas=prediction_background, tile_size=tile_size)
-                render_tumor_bed(image_dataset, image_canvas=wsi_background, tile_size=tile_size)
-                original_tumor_bed, prediction_tumor_bed = crop_image(
-                    wsi_background, prediction_background, setup_dictionary
-                )
-                plot_tb_vizualization(
-                    original_tumor_bed,
-                    prediction_tumor_bed,
-                    human_itsp_score=human_itsp_score,
-                    ai_itsp_score=itsp,
-                    inference_file=inference_file,
-                    output_path=output_path,
-                    slide_id=slide_id,
-                )
+            wsi_viz, pred_viz = render_visualization(
+                image_dataset, prediction_slide_dataset, tile_size, wsi_background, prediction_background
+            )
+            original_tumor_bed, prediction_tumor_bed = crop_image(wsi_viz, pred_viz, setup_dictionary)
+            plot_visualization(
+                original_tumor_bed,
+                prediction_tumor_bed,
+                human_itsp_score=human_itsp_score,
+                ai_itsp_score=itsp,
+                inference_file=inference_file,
+                output_path=output_path,
+                slide_id=slide_id,
+                vizualization_type=setup_dictionary["annotation_type"],
+            )
 
         make_csv_entries(
             inference_file=inference_file,
