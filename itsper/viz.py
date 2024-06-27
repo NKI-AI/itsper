@@ -15,7 +15,6 @@ from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
 OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")
-Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 
 
 def plot_2d(
@@ -136,9 +135,9 @@ def plot_visualization(
     vizualization_type: ItsperAnnotationTypes,
 ) -> None:
     if vizualization_type == ItsperAnnotationTypes.MI_REGION:
-        extra_space = 1300
+        extra_space = 1000
     else:
-        extra_space = 2500
+        extra_space = 1200
     # Create a new image with space for the two images and additional text
     viz_image = Image.new(
         "RGBA",
@@ -148,7 +147,7 @@ def plot_visualization(
 
     # Paste the original and prediction images into the new image
     viz_image.paste(original_image, (0, 0))
-    viz_image.paste(prediction_image, (original_image.size[0] + 50, 0))
+    viz_image.paste(prediction_image, (original_image.size[0] + 150, 0))
 
     # Convert to RGB (removing alpha channel)
     viz_image = viz_image.convert("RGB")
@@ -160,12 +159,14 @@ def plot_visualization(
     plt.imshow(viz_image)
     plt.yticks([])
     plt.xticks([])
-    font_size = max(10, min(plt.xlim()[1], plt.xlim()[0]) // 20)
+    plt.tight_layout()
+    plt.gca().set_axis_off()
+    font_size = max(7, min(plt.xlim()[1], plt.xlim()[0]) // 20)
     if human_itsp_score:
         plt.text(50, 0, f"Human score:{human_itsp_score} %", fontsize=font_size)
     plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{ai_itsp_score} %", fontsize=font_size)
     plt.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=font_size, loc="upper right")
-    plt.savefig(output_file_path, dpi=300)
+    plt.savefig(output_file_path, dpi=1000)
     plt.close()
 
 
@@ -174,8 +175,10 @@ def crop_image(
 ) -> tuple[Image, Image]:
     x0, y0, x1, y1 = setup_dictionary["scaled_annotation_bounds"]
     if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
-        draw_fov = ImageDraw.Draw(wsi_background)
-        draw_fov.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
+        draw_fov_wsi = ImageDraw.Draw(wsi_background)
+        draw_fov_wsi.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
+        draw_fov_pred = ImageDraw.Draw(prediction_background)
+        draw_fov_pred.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
     original_tumor_bed = wsi_background.crop((x0, y0, x1, y1))
     prediciton_tumor_bed = prediction_background.crop((x0, y0, x1, y1))
     return original_tumor_bed, prediciton_tumor_bed
