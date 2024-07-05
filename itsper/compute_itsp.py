@@ -63,8 +63,8 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     slide_image = SlideImage.from_file_path(image_path, internal_handler="pil")
     scaling = slide_image.get_scaling(native_mpp_for_inference)
     scaled_image_size = slide_image.get_scaled_size(scaling)
-    annotations = WsiAnnotations.from_geojson(annotation_path, scaling=1.0)
-    available_labels = annotations.available_labels
+    annotations = WsiAnnotations.from_geojson(annotation_path)
+    available_labels = annotations.available_classes
     for a_class in available_labels:
         if a_class.label == ItsperAnnotationTypes.TUMORBED:
             a_type = a_class.label
@@ -76,7 +76,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
             )
     scaled_annotation_bounds = annotations.read_region((0, 0), scaling=scaling, size=scaled_image_size)[0].bounds
 
-    roi_name = annotations.available_labels[0].label
+    roi_name = annotations.available_classes[0].label
     transform = ConvertAnnotationsToMask(roi_name=roi_name, index_map={roi_name: 1})
 
     setup_dict = {
@@ -165,7 +165,7 @@ def itsp_computer(
             transform=setup_dictionary["transform"],
             tile_mode=TilingMode.overflow,
             backend=ImageBackend.OPENSLIDE,
-            internal_handler="pil",
+            internal_handler="vips",
         )
         try:
             prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
@@ -181,7 +181,7 @@ def itsp_computer(
                 tile_mode=TilingMode.overflow,
                 interpolator=Resampling.NEAREST,
                 backend=ImageBackend.OPENSLIDE,
-                internal_handler="pil",
+                internal_handler="vips",
             )
         except Exception as error:
             logger.info(f"OPENSLIDE fails because: {error}. Attempting with TIFFFILE...")
@@ -198,7 +198,7 @@ def itsp_computer(
                 tile_mode=TilingMode.overflow,
                 interpolator=Resampling.NEAREST,
                 backend=ImageBackend.TIFFFILE,
-                internal_handler="pil",
+                internal_handler="vips",
             )
         logger.info(f"Generating visualizations for: {slide_id}")
         itsp = get_itsp_score(prediction_slide_dataset)
