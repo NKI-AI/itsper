@@ -18,7 +18,7 @@ with open("README.rst") as readme_file:
 install_requires = [
     "numpy>=1.25.2",
     "pillow>=9.5.0",
-    "dlup>=0.3.34",
+    "dlup>=0.5.2",
     "shapely",
     "pathlib",
     "typing",
