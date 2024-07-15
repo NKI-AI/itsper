@@ -1,7 +1,9 @@
 from typing import Any, Dict, List, Union
 
 from dlup import SlideImage
-from dlup.annotations import AnnotationClass, AnnotationType, Polygon, WsiAnnotations
+from dlup.annotations import AnnotationClass, AnnotationType
+from dlup.annotations import Polygon as DlupPolygon
+from dlup.annotations import WsiAnnotations
 from shapely import Point
 from shapely.affinity import affine_transform, translate
 from shapely.geometry import mapping
@@ -29,18 +31,22 @@ def offset_and_scale_tumorbed(
     offset_annotations: WsiAnnotations
         Annotations on the WSI rescaled to match the tiff image resolution.
     """
-    single_annotations: list[Polygon] = []
+    single_annotations: list[DlupPolygon] = []
     single_annotation_tags: list[AnnotationClass] = []
-    annotation_class = annotations.available_classes
+    available_classes = annotations.available_classes  # We assume that there is only one class in the annotations.
+    if len(available_classes) > 1:
+        raise ValueError(f"More than one class found in the annotations for {slide_image.identifier}.")
+    if available_classes[0].label != ItsperAnnotationTypes.TUMORBED.value:
+        raise ValueError(f"Annotation type is not Tumorbed for {slide_image.identifier}.")
     slide_offset, _ = slide_image.slide_bounds
     scaling_to_native_mpp_at_inference = slide_image.get_scaling(native_mpp_for_inference)
     transformation_matrix = [scaling_to_native_mpp_at_inference, 0, 0, scaling_to_native_mpp_at_inference, 0, 0]
     polygons = annotations.read_region((0, 0), scaling=native_mpp_for_inference, size=slide_image.size)
-    for ann_class, polygon in zip(annotation_class, polygons):
+    for polygon in polygons:
         translated_polygon = translate(polygon, -slide_offset[0], -slide_offset[1])
         transformed_polygon = affine_transform(translated_polygon, transformation_matrix)
-        single_annotations.append(Polygon(transformed_polygon, ann_class))
-        single_annotation_tags.append(ann_class)
+        single_annotations.append(DlupPolygon(transformed_polygon, a_cls=available_classes[0]))
+        single_annotation_tags.append(available_classes)
     offset_annotations = WsiAnnotations(layers=single_annotations, tags=single_annotation_tags)
     return offset_annotations
 
@@ -53,8 +59,8 @@ def get_most_invasive_region(
     if len(annotations.available_classes) > 1:
         raise ValueError(f"More than one most invasive regions found in the annotations for {slide_image.identifier}.")
 
-    most_invasive_region: list[Polygon] = []
-    offset_most_invasive_region: list[Polygon] = []
+    most_invasive_region: list[DlupPolygon] = []
+    offset_most_invasive_region: list[DlupPolygon] = []
 
     annotation_class = AnnotationClass
     annotation_class.annotation_type = AnnotationType.POLYGON
@@ -76,17 +82,17 @@ def get_most_invasive_region(
     # We fix the radius of the circle to 1.05mm following the Leiden protocol.
     radius = 1.05 * 10e-3 / (slide_image.mpp * 10e-6)
     # Create a circle polygon from the center point with the calculated radius
-    most_invasive_region.append(Polygon(center.buffer(radius), annotation_class))
+    most_invasive_region.append(DlupPolygon(center.buffer(radius), annotation_class))
 
     translated_most_invasive_region = translate(center.buffer(radius), -slide_offset[0], -slide_offset[1])
     transformed_most_invasive_region = affine_transform(translated_most_invasive_region, transformation_matrix)
-    offset_most_invasive_region.append(Polygon(transformed_most_invasive_region, annotation_class))
+    offset_most_invasive_region.append(DlupPolygon(transformed_most_invasive_region, annotation_class))
     return WsiAnnotations(most_invasive_region, [annotation_class]), WsiAnnotations(
         offset_most_invasive_region, [annotation_class]
     )
 
 
-def to_geojson_format(list_of_points: list[Polygon], label: str) -> dict[str, Any]:
+def to_geojson_format(list_of_points: list[DlupPolygon], label: str) -> dict[str, Any]:
     """
     Convert a given list of annotations into the GeoJSON standard.
 

@@ -98,6 +98,8 @@ def render_visualization(
         coords = np.array(wsi_sample["coordinates"])
         box = tuple(np.array((*coords, *(coords + tile_size))).astype(int))
         roi = prediction_sample["annotation_data"]["roi"]
+        if prediction_sample["image"].mode == "L" or "p":
+            prediction_sample["image"] = colorize(prediction_sample["image"])
         prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=roi)
         prediction_tile = np.where(prediction_tile == 0, 255, prediction_tile)
         wsi_tile = np.asarray(wsi_sample["image"]) * roi[:, :, np.newaxis]

@@ -98,7 +98,7 @@ def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> float
     total_others = 0
     for sample in image_dataset:
         roi = check_if_roi_is_present(sample)
-        if sample["image"].mode == "L":
+        if sample["image"].mode == "L" or "p":
             sample["image"] = colorize(sample["image"])
         indexed_image = assign_index_to_pixels(sample["image"], roi=roi)
         sample["image"] = indexed_image
@@ -164,42 +164,24 @@ def itsp_computer(
             mask_threshold=0.0,
             transform=setup_dictionary["transform"],
             tile_mode=TilingMode.overflow,
-            backend=ImageBackend.OPENSLIDE,
+            backend=ImageBackend.PYVIPS,
             internal_handler="vips",
         )
-        try:
-            prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
-                inference_file,
-                mpp=native_mpp_for_inference,
-                tile_size=tile_size,
-                tile_overlap=(0, 0),
-                crop=False,
-                annotations=setup_dictionary["offset_annotations"],
-                mask=setup_dictionary["offset_annotations"],
-                mask_threshold=0.0,
-                transform=setup_dictionary["transform"],
-                tile_mode=TilingMode.overflow,
-                interpolator=Resampling.NEAREST,
-                backend=ImageBackend.OPENSLIDE,
-                internal_handler="vips",
-            )
-        except Exception as error:
-            logger.info(f"OPENSLIDE fails because: {error}. Attempting with TIFFFILE...")
-            prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
-                inference_file,
-                mpp=native_mpp_for_inference,
-                tile_size=tile_size,
-                tile_overlap=(0, 0),
-                crop=False,
-                annotations=setup_dictionary["offset_annotations"],
-                mask=setup_dictionary["offset_annotations"],
-                mask_threshold=0.0,
-                transform=setup_dictionary["transform"],
-                tile_mode=TilingMode.overflow,
-                interpolator=Resampling.NEAREST,
-                backend=ImageBackend.TIFFFILE,
-                internal_handler="vips",
-            )
+        prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
+            inference_file,
+            mpp=native_mpp_for_inference,
+            tile_size=tile_size,
+            tile_overlap=(0, 0),
+            crop=False,
+            annotations=setup_dictionary["offset_annotations"],
+            mask=setup_dictionary["offset_annotations"],
+            mask_threshold=0.0,
+            transform=setup_dictionary["transform"],
+            tile_mode=TilingMode.overflow,
+            interpolator=Resampling.NEAREST,
+            backend=ImageBackend.TIFFFILE,
+            internal_handler="pil",
+        )
         logger.info(f"Generating visualizations for: {slide_id}")
         itsp = get_itsp_score(prediction_slide_dataset)
         logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
