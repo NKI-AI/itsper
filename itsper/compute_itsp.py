@@ -11,7 +11,6 @@ from dlup.data.dataset import TiledWsiDataset
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
 from numpy.typing import NDArray
-from PIL import Image
 
 from itsper.annotations import get_most_invasive_region, offset_and_scale_tumorbed
 from itsper.io import get_logger
@@ -62,7 +61,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
 
     slide_image = SlideImage.from_file_path(image_path, internal_handler="pil")
     scaling = slide_image.get_scaling(native_mpp_for_inference)
-    scaled_image_size = slide_image.get_scaled_size(scaling)
+    scaled_wsi_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path)
     available_labels = annotations.available_classes
     for a_class in available_labels:
@@ -74,7 +73,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
             annotations, offset_annotations = get_most_invasive_region(
                 annotations, slide_image, native_mpp_for_inference
             )
-    scaled_annotation_bounds = annotations.read_region((0, 0), scaling=scaling, size=scaled_image_size)[0].bounds
+    scaled_annotation_bounds = annotations.read_region((0, 0), scaling=scaling, size=scaled_wsi_size)[0].bounds
 
     roi_name = annotations.available_classes[0].label
     transform = ConvertAnnotationsToMask(roi_name=roi_name, index_map={roi_name: 1})
@@ -82,7 +81,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     setup_dict = {
         "slide_image": slide_image,
         "scaling": scaling,
-        "scaled_image_size": scaled_image_size,
+        "scaled_wsi_size": scaled_wsi_size,
         "annotations": annotations,
         "offset_annotations": offset_annotations,
         "scaled_annotation_bounds": scaled_annotation_bounds,
@@ -180,16 +179,15 @@ def itsp_computer(
             tile_mode=TilingMode.overflow,
             interpolator=Resampling.NEAREST,
             backend=ImageBackend.TIFFFILE,
-            internal_handler="pil",
+            internal_handler="vips",
         )
         logger.info(f"Generating visualizations for: {slide_id}")
         itsp = get_itsp_score(prediction_slide_dataset)
         logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
         if render_images:
-            slide_image = setup_dictionary["slide_image"]
-            scaled_region_view = slide_image.get_scaled_view(slide_image.get_scaling(native_mpp_for_inference))
-            wsi_background = Image.new("RGBA", scaled_region_view.size, (255, 255, 255, 255))
-            prediction_background = Image.new("RGBA", scaled_region_view.size, (255, 255, 255, 255))
+            wsi_viz, pred_viz = render_visualization(
+                image_dataset, prediction_slide_dataset, tile_size, setup_dictionary
+            )
             if itsp_scoring_sheet is not None:
                 human_itsp_score = itsp_scoring_sheet.loc[
                     itsp_scoring_sheet[ITSPScoringSheetHeaders.SLIDE_ID.value] == slide_id,
@@ -197,13 +195,9 @@ def itsp_computer(
                 ].item()
             else:
                 logger.info("No human scores found. So, not rendering human scores.")
-            wsi_viz, pred_viz = render_visualization(
-                image_dataset, prediction_slide_dataset, tile_size, wsi_background, prediction_background
-            )
-            original_tumor_bed, prediction_tumor_bed = crop_image(wsi_viz, pred_viz, setup_dictionary)
             plot_visualization(
-                original_tumor_bed,
-                prediction_tumor_bed,
+                wsi_viz,
+                pred_viz,
                 human_itsp_score=human_itsp_score,
                 ai_itsp_score=itsp,
                 inference_file=inference_file,

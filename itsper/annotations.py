@@ -33,20 +33,21 @@ def offset_and_scale_tumorbed(
     """
     single_annotations: list[DlupPolygon] = []
     single_annotation_tags: list[AnnotationClass] = []
-    available_classes = annotations.available_classes  # We assume that there is only one class in the annotations.
-    if len(available_classes) > 1:
-        raise ValueError(f"More than one class found in the annotations for {slide_image.identifier}.")
-    if available_classes[0].label != ItsperAnnotationTypes.TUMORBED.value:
-        raise ValueError(f"Annotation type is not Tumorbed for {slide_image.identifier}.")
+
+    # We assume that there is only one class in the annotations.
+    annotation_class = AnnotationClass
+    annotation_class.annotation_type = AnnotationType.POLYGON
+    annotation_class.label = ItsperAnnotationTypes.TUMORBED
+
     slide_offset, _ = slide_image.slide_bounds
     scaling_to_native_mpp_at_inference = slide_image.get_scaling(native_mpp_for_inference)
     transformation_matrix = [scaling_to_native_mpp_at_inference, 0, 0, scaling_to_native_mpp_at_inference, 0, 0]
-    polygons = annotations.read_region((0, 0), scaling=native_mpp_for_inference, size=slide_image.size)
+    polygons = annotations.read_region((0, 0), scaling=1.0, size=slide_image.size)
     for polygon in polygons:
         translated_polygon = translate(polygon, -slide_offset[0], -slide_offset[1])
         transformed_polygon = affine_transform(translated_polygon, transformation_matrix)
-        single_annotations.append(DlupPolygon(transformed_polygon, a_cls=available_classes[0]))
-        single_annotation_tags.append(available_classes)
+        single_annotations.append(DlupPolygon(transformed_polygon, a_cls=annotation_class))
+        single_annotation_tags.append(annotation_class)
     offset_annotations = WsiAnnotations(layers=single_annotations, tags=single_annotation_tags)
     return offset_annotations
 

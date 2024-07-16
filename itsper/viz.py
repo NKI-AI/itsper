@@ -15,6 +15,7 @@ from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
 OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")
+Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
 
 
 def plot_2d(
@@ -91,39 +92,52 @@ def render_visualization(
     image_dataset: Generator[dict[str, Any], int, None],
     prediction_dataset: Generator[dict[str, Any], int, None],
     tile_size: tuple[int, int],
-    wsi_background: Image,
-    prediction_background: Image,
+    setup_dictionary: dict[str, Any],
 ) -> tuple[Image, Image]:
+    wsi_background = Image.new("RGBA", setup_dictionary["scaled_wsi_size"], (255, 255, 255, 255))
+    prediction_background = Image.new("RGBA", setup_dictionary["scaled_wsi_size"], (255, 255, 255, 255))
+
     for wsi_sample, prediction_sample in zip(image_dataset, prediction_dataset):
-        coords = np.array(wsi_sample["coordinates"])
-        box = tuple(np.array((*coords, *(coords + tile_size))).astype(int))
-        roi = prediction_sample["annotation_data"]["roi"]
-        if prediction_sample["image"].mode == "L" or "p":
+        wsi_coords = np.array(wsi_sample["coordinates"])
+
+        wsi_box = tuple(np.array((*wsi_coords, *(wsi_coords + tile_size))).astype(int))
+        wsi_roi = wsi_sample["annotation_data"]["roi"]
+
+        # Correct mode checking
+        if prediction_sample["image"].mode in ["L", "p"]:
             prediction_sample["image"] = colorize(prediction_sample["image"])
-        prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=roi)
+
+        prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=wsi_roi)
         prediction_tile = np.where(prediction_tile == 0, 255, prediction_tile)
-        wsi_tile = np.asarray(wsi_sample["image"]) * roi[:, :, np.newaxis]
+
+        wsi_tile = np.asarray(wsi_sample["image"]) * wsi_roi[:, :, np.newaxis]
         wsi_tile = np.where(wsi_tile == 0, 255, wsi_tile)
+
         prediction_sample_viz = plot_2d(
-            Image.fromarray(prediction_tile),
-            mask=prediction_tile * roi,
+            Image.fromarray(prediction_tile.astype(np.uint8)),
+            mask=prediction_tile * wsi_roi,
             mask_colors={1: "green", 2: "red", 3: "yellow"},
         )
-        prediction_background.paste(prediction_sample_viz, box)
-        wsi_background.paste(Image.fromarray(wsi_tile.astype(np.uint8)), box)
+
+        prediction_background.paste(prediction_sample_viz, wsi_box)
+        wsi_background.paste(Image.fromarray(wsi_tile.astype(np.uint8)), wsi_box)
+
         wsi_drawer = ImageDraw.Draw(wsi_background)
         prediction_drawer = ImageDraw.Draw(prediction_background)
-        xy = []
-        if wsi_sample["annotations"] and prediction_sample["annotations"] is not None:
+
+        if wsi_sample.get("annotations") and prediction_sample.get("annotations") is not None:
             for polygon in wsi_sample["annotations"]:
                 x, y = polygon.exterior.xy
+                xy = []
                 for x_coord, y_coord in zip(x, y):
                     xy.append(x_coord + wsi_sample["coordinates"][0])
                     xy.append(y_coord + wsi_sample["coordinates"][1])
                 wsi_drawer.polygon(xy, outline="black")
                 prediction_drawer.polygon(xy, outline="black")
-                xy = []
-    return wsi_background, prediction_background
+
+    cropped_wsi, cropped_prediction = crop_image(wsi_background, prediction_background, setup_dictionary)
+
+    return cropped_wsi, cropped_prediction
 
 
 def plot_visualization(
