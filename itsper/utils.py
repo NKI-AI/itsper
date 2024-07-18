@@ -12,7 +12,17 @@ def make_csv(output_path: Path) -> None:
     if not csv_file_path.is_file():
         with open(csv_file_path, "w", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(["Folder Name", "Image ID", "ITSP_HUMAN", "ITSP_AI"])  # Writing the header
+            writer.writerow(
+                [
+                    "Folder Name",
+                    "Image ID",
+                    "ITSP_HUMAN",
+                    "ITSP_AI",
+                    "Total stroma pixels",
+                    "Total tumor pixels",
+                    "Total other pixels",
+                ]
+            )  # Writing the header
 
 
 def check_if_roi_is_present(sample: dict[str, Any]) -> WsiAnnotations | None:
@@ -24,9 +34,24 @@ def check_if_roi_is_present(sample: dict[str, Any]) -> WsiAnnotations | None:
 
 
 def make_csv_entries(
-    inference_file: Path, output_path: Path, slide_id: str, human_itsp: Optional[float], ai_itsp: float
+    inference_file: Path,
+    output_path: Path,
+    slide_id: str,
+    human_itsp: Optional[float],
+    ai_itsp: float,
+    total_tumor: float,
+    total_stroma: float,
+    total_others: float,
 ) -> None:
-    slide_details = [inference_file.parent.name, slide_id, str(human_itsp), str(ai_itsp)]
+    slide_details = [
+        inference_file.parent.name,
+        slide_id,
+        str(human_itsp),
+        str(ai_itsp),
+        str(total_tumor),
+        str(total_stroma),
+        str(total_others),
+    ]
 
     csv_file_path = output_path / Path("slide_details.csv")
     with open(csv_file_path, "a", newline="") as file:

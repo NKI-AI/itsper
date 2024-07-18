@@ -22,7 +22,7 @@ from itsper.utils import (
     make_csv_entries,
     make_directories_if_needed,
 )
-from itsper.viz import assign_index_to_pixels, colorize, crop_image, plot_visualization, render_visualization
+from itsper.viz import assign_index_to_pixels, colorize, plot_visualization, render_visualization
 
 logger = get_logger(__name__)
 
@@ -91,7 +91,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     return setup_dict
 
 
-def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> float:
+def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> tuple[float, float, float, float]:
     total_tumor = 0
     total_stroma = 0
     total_others = 0
@@ -108,7 +108,7 @@ def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> float
 
     itsp = (total_stroma * 100) / (total_stroma + total_tumor)
     itsp = round(itsp, 2)
-    return itsp
+    return itsp, total_tumor, total_stroma, total_others
 
 
 def itsp_computer(
@@ -182,7 +182,7 @@ def itsp_computer(
             internal_handler="vips",
         )
         logger.info(f"Generating visualizations for: {slide_id}")
-        itsp = get_itsp_score(prediction_slide_dataset)
+        itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
         logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
         if render_images:
             wsi_viz, pred_viz = render_visualization(
@@ -212,4 +212,7 @@ def itsp_computer(
             slide_id=slide_id,
             human_itsp=human_itsp_score,
             ai_itsp=itsp,
+            total_tumor=total_tumor,
+            total_stroma=total_stroma,
+            total_others=total_others,
         )

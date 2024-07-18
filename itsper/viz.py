@@ -22,7 +22,7 @@ def plot_2d(
     image: PIL.Image.Image,
     mask: npt.NDArray[np.int_] | None = None,
     mask_colors: dict[int, str] | None = None,
-    mask_alpha: int = 70,
+    mask_alpha: int = 80,
 ) -> PIL.Image.Image:
     """
     Plotting utility to overlay masks and geometries (Points, Polygons) on top of the image.
