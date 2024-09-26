@@ -138,7 +138,10 @@ def itsp_computer(
     image_files, annotation_files, inference_files = get_list_of_files(folder_dictionary)
     for inference_file in inference_files:
         slide_id = inference_file.stem
-        wsi_path = [image_file for image_file in image_files if image_file.stem == slide_id][0]
+        wsi_path = [image_file for image_file in image_files if image_file.stem == slide_id]
+        if len(wsi_path) == 0:
+            logger.info(f"{slide_id} has no corresponding image. Skipping it.")
+            continue
         slide_annotation_path = []
         if annotation_files is not None:
             slide_annotation_path = [
@@ -150,10 +153,10 @@ def itsp_computer(
                 logger.info(f"{slide_id} has no annotation. Skipping it.")
                 continue
 
-        setup_dictionary = setup(wsi_path, slide_annotation_path[0], native_mpp_for_inference)
+        setup_dictionary = setup(wsi_path[0], slide_annotation_path[0], native_mpp_for_inference)
 
         image_dataset = TiledWsiDataset.from_standard_tiling(
-            wsi_path,
+            wsi_path[0],
             mpp=native_mpp_for_inference,
             tile_size=tile_size,
             tile_overlap=(0, 0),
