@@ -73,7 +73,7 @@ def get_list_of_files(folder_dictionary: dict[str, Any]) -> tuple[list[Path], li
     annotations_folder = folder_dictionary.get("annotations_path", None)
     annotations_format = folder_dictionary.get("annotation_format", None)
 
-    paths_to_images = images_path.glob(f"*{ItsperWsiExtensions(image_format).value}")
+    paths_to_images = images_path.rglob(f"*{ItsperWsiExtensions(image_format).value}")
     image_files = [x for x in paths_to_images if x.is_file()]
 
     if annotations_folder is not None:
