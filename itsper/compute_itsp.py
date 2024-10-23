@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any, Generator, Optional
 
 import numpy as np
-import pandas as pd
 from dlup import SlideImage
 from dlup._image import Resampling
 from dlup.annotations import WsiAnnotations
@@ -14,11 +13,9 @@ from numpy.typing import NDArray
 
 from itsper.annotations import get_most_invasive_region, offset_and_scale_tumorbed
 from itsper.io import get_logger
-from itsper.types import ItsperAnnotationTypes, ITSPScoringSheetHeaders
+from itsper.types import ItsperAnnotationTypes
 from itsper.utils import (
     check_if_roi_is_present,
-    check_integrity_of_files,
-    get_list_of_files,
     make_csv_entries,
     make_directories_if_needed,
 )
@@ -174,11 +171,12 @@ def itsp_computer(
             backend=ImageBackend.TIFFFILE,
             internal_handler="vips",
         )
-        logger.info(f"Generating visualizations for: {slide_id}")
+        logger.info(f"Computing ITSP for: {slide_id}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
         human_itsp_score = itsp_score.score if itsp_score is not None else "Unknown"
-        logger.info(f"The ITSP for image: {slide_id} | AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
+        logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
         if render_images:
+            logger.info("Rendering visualization...")
             wsi_viz, pred_viz = render_visualization(
                 image_dataset, prediction_slide_dataset, tile_size, setup_dictionary
             )
