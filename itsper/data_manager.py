@@ -101,7 +101,7 @@ class ITSPScore(Base):
     __tablename__ = "human_itsp"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    score = Column(Float, nullable=False)  # ITSP score given by a human observer
+    score = Column(Float, nullable=True)  # ITSP score given by a human observer
     image_id = Column(Integer, ForeignKey("images.id"), nullable=False)
 
     image = relationship("Image", back_populates="human_itsp")
