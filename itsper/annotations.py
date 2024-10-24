@@ -4,6 +4,7 @@ from dlup.annotations import Polygon as DlupPolygon
 from dlup.annotations import WsiAnnotations
 from shapely import Point
 from shapely.affinity import affine_transform, translate
+from typing import Type
 
 from itsper.types import ItsperAnnotationTypes
 
@@ -29,7 +30,7 @@ def offset_and_scale_tumorbed(
         Annotations on the WSI rescaled to match the tiff image resolution.
     """
     single_annotations: list[DlupPolygon] = []
-    single_annotation_tags: list[AnnotationClass] = []
+    single_annotation_tags: list[Type[AnnotationClass]] = []
 
     # We assume that there is only one class in the annotations.
     annotation_class = AnnotationClass

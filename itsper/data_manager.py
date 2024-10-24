@@ -4,13 +4,16 @@ from typing import List
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Mapped, relationship, sessionmaker
+from sqlalchemy.orm import Mapped, relationship, sessionmaker, DeclarativeBase, Session
 
 from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
+
+
 console = Console()
 logger = get_logger(__name__)
 
@@ -109,7 +112,7 @@ class ITSPScore(Base):
     image = relationship("Image", back_populates="human_itsp")
 
 
-def create_session(db_path: Path):
+def create_session(db_path: Path) -> Session:
     """
     Creates the database for computing itsp database and its schema.
     """
@@ -119,14 +122,14 @@ def create_session(db_path: Path):
     return session()
 
 
-def open_db_session(database_path: Path):
+def open_db_session(database_path: Path) -> Session:
     """Open a session for interacting with the prediction database."""
     engine = create_engine(f"sqlite:///{database_path}")
     session = sessionmaker(bind=engine)
     return session()
 
 
-def get_paired_data(session):
+def get_paired_data(session: Session) -> List[tuple[Image, InferenceImage, Annotation, ITSPScore]]:
     """Retrieve paired tuples of image, inference image, annotation, and ITSP score."""
     paired_data = []
 
@@ -147,7 +150,7 @@ def get_paired_data(session):
     return paired_data
 
 
-def summarize_database(session):
+def summarize_database(session: Session) -> None:
     """Print a summary of the database contents using rich formatting and logger."""
     logger.info("Summarizing the database contents from the manifest...")
     manifest_name = session.query(ItsperManifest).first().name

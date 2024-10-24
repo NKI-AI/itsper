@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 
-from dlup.annotations import WsiAnnotations
+from dlup.data.dataset import RegionFromWsiDatasetSample
 
 
 def make_csv(output_path: Path) -> None:
@@ -23,7 +23,7 @@ def make_csv(output_path: Path) -> None:
             )  # Writing the header
 
 
-def check_if_roi_is_present(sample: dict[str, Any]) -> WsiAnnotations | None:
+def check_if_roi_is_present(sample: RegionFromWsiDatasetSample) -> Any:
     if sample.get("annotation_data", None) is not None:
         roi = sample["annotation_data"]["roi"]
     else:

@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 import numpy as np
 from dlup import SlideImage
 from dlup._image import Resampling
 from dlup.annotations import WsiAnnotations
 from dlup.backends import ImageBackend
-from dlup.data.dataset import TiledWsiDataset
+from dlup.data.dataset import TiledWsiDataset, RegionFromWsiDatasetSample
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
 from numpy.typing import NDArray
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 def get_class_pixels(
-    sample: dict[str, Any]
+        sample: RegionFromWsiDatasetSample,
 ) -> tuple[NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_]]:
     """
     Obtain the pixels corresponding to each class and the region of interest.
@@ -31,7 +31,7 @@ def get_class_pixels(
     stroma_mask = (curr_mask == 1).astype(np.uint8)
     tumor_mask = (curr_mask == 2).astype(np.uint8)
     other_mask = (curr_mask == 3).astype(np.uint8)
-    roi = sample["annotation_data"]["roi"]
+    roi = sample["annotation_data"]["roi"]  # type: ignore
     return curr_mask, stroma_mask, tumor_mask, other_mask, roi
 
 
@@ -52,13 +52,14 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
         The microns per pixel at which the images need to be rendered.
     """
     kwargs = {}
+    a_type: ItsperAnnotationTypes | None = None
     offset_annotations: WsiAnnotations | None = None
     if (
-        image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
-        or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
+            image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
+            or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
     ):
         kwargs["overwrite_mpp"] = (0.25, 0.25)
-    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs)
+    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs) # type: ignore
     scaling = slide_image.get_scaling(native_mpp_for_inference)
     scaled_wsi_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path)
@@ -90,7 +91,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     return setup_dict
 
 
-def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> tuple[float, float, float, float]:
+def get_itsp_score(image_dataset: TiledWsiDataset) -> tuple[float, float, float, float]:
     total_tumor = 0
     total_stroma = 0
     total_others = 0
@@ -111,12 +112,12 @@ def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> tuple
 
 
 def itsp_computer(
-    manifest_path: Path,
-    images_root: Path,
-    annotations_root: Path,
-    inference_root: Path,
-    output_path: Path,
-    render_images: int = 1,
+        manifest_path: Path,
+        images_root: Path,
+        annotations_root: Path,
+        inference_root: Path,
+        output_path: Path,
+        render_images: int = 1,
 ) -> None:
     session = open_db_session(manifest_path)
     summarize_database(session)
@@ -128,8 +129,8 @@ def itsp_computer(
         wsi_path = images_root / image.filename
         slide_annotation_path = annotations_root / annotation.filename
         inference_file = inference_root / inference_image.filename
-        native_mpp_for_inference = inference_image.mpp
-        tile_size = (inference_image.tile_size, inference_image.tile_size)
+        native_mpp_for_inference = float(inference_image.mpp)
+        tile_size = (int(inference_image.tile_size), int(inference_image.tile_size))
 
         make_directories_if_needed(folder=images_root, output_path=output_path)
         setup_dictionary = setup(wsi_path, slide_annotation_path, native_mpp_for_inference)
@@ -150,7 +151,7 @@ def itsp_computer(
             tile_mode=TilingMode.overflow,
             backend=ImageBackend.PYVIPS,
             internal_handler="vips",
-            **kwargs,
+            **kwargs,  # type: ignore
         )
         prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
             inference_file,
@@ -169,7 +170,7 @@ def itsp_computer(
         )
         logger.info(f"Computing ITSP for: {slide_id}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
-        human_itsp_score = itsp_score.score if itsp_score is not None else "Unknown"
+        human_itsp_score = float(itsp_score.score) if itsp_score is not None else None
         logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
         if render_images:
             logger.info("Rendering visualization...")

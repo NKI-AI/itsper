@@ -6,19 +6,15 @@ from rich.text import Text
 
 
 def get_logger(name: str) -> logging.Logger:
-    # Create a custom logger
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)  # Set logger to capture info level messages
+    logger.setLevel(logging.INFO)
 
-    # Create a console handler and set level to INFO
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
 
-    # Create formatter and add it to the handler
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     ch.setFormatter(formatter)
 
-    # Add the handler to the logger
     logger.addHandler(ch)
     return logger
 
@@ -26,13 +22,11 @@ def get_logger(name: str) -> logging.Logger:
 logger = get_logger("ITSPER")
 
 
-def display_ascii_text_with_circle():
+def display_ascii_text_with_circle() -> None:
     console = Console()
 
-    # Generate the "ITSPER" text in a retro style using pyfiglet
     itsp_ascii_art = pyfiglet.figlet_format("ITSPER", font="slant").splitlines()
 
-    # Create a properly shaped colored circle using rich.Text with red, green, and yellow regions
     circle = [
         Text("      ◯ ◯ ◯ ◯ ◯      ", style="bold red"),  # Top of the circle (red)
         Text("    ◯ ", style="bold red") + Text("◯ ◯ ", style="bold red") + Text("◯ ◯ ◯ ◯  ", style="bold green"),
@@ -48,7 +42,6 @@ def display_ascii_text_with_circle():
         Text("      ◯ ◯ ◯ ◯ ◯      ", style="bold red"),  # Bottom of the circle (red)
     ]
 
-    # Combine ASCII art and circle on the same line
     combined_output = []
     for i in range(len(itsp_ascii_art)):
         if i < len(circle):
@@ -56,7 +49,6 @@ def display_ascii_text_with_circle():
         else:
             combined_output.append((itsp_ascii_art[i], None))
 
-    # Print the combined result
     for text, circle_text in combined_output:
         if circle_text:
             console.print(text + "   ", end="")
@@ -67,15 +59,13 @@ def display_ascii_text_with_circle():
     print_rich_statement(console)
 
 
-def print_rich_statement(console):
-    """Print the ITSPected statement below the graphics using rich styling."""
+def print_rich_statement(console: Console) -> None:
     statement = Text("ITSPER - ", style="bold blue")
     statement.append("Exploring tumor microenvironments through ", style="italic green")
     statement.append("ITSP quantification.", style="bold magenta")
     console.print(statement)
 
 
-def display_launch_graphic():
-    """Display ASCII text and the circle graphic in the terminal on the same line."""
+def display_launch_graphic() -> None:
     display_ascii_text_with_circle()
     logger.info("ITSPER is not intended for clinical use")

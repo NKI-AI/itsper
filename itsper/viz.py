@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Optional
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+from dlup.data.dataset import TiledWsiDataset
 import PIL
 from numpy._typing import NDArray
 from PIL import Image, ImageDraw
@@ -89,8 +90,8 @@ def colorize(image: Image) -> Image:
 
 
 def render_visualization(
-    image_dataset: Generator[dict[str, Any], int, None],
-    prediction_dataset: Generator[dict[str, Any], int, None],
+    image_dataset: TiledWsiDataset,
+    prediction_dataset: TiledWsiDataset,
     tile_size: tuple[int, int],
     setup_dictionary: dict[str, Any],
 ) -> tuple[Image, Image]:
