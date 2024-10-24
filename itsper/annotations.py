@@ -92,39 +92,3 @@ def get_most_invasive_region(
         offset_most_invasive_region, [annotation_class]
     )
 
-
-def to_geojson_format(list_of_points: list[DlupPolygon], label: str) -> dict[str, Any]:
-    """
-    Convert a given list of annotations into the GeoJSON standard.
-
-    Parameters
-    ----------
-    list_of_points: list
-        A list containing annotation shapes or coordinates.
-    label: str
-        The string identifying the annotation class.
-    """
-
-    feature_collection = {
-        "type": "FeatureCollection",
-        "features": [],
-    }
-
-    features: List[Any] = []
-    properties: Dict[str, Union[str, Dict[str, str | None]]] = {
-        "classification": {"name": label, "color": None},
-    }
-    if len(list_of_points) == 0:
-        feature_collection["features"] = []
-    else:
-        for data in list_of_points:
-            geometry = mapping(data)
-            features.append(
-                {
-                    "type": "Feature",
-                    "properties": properties,
-                    "geometry": geometry,
-                }
-            )
-        feature_collection["features"] = features
-    return feature_collection
