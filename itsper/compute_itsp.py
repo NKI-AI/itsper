@@ -12,15 +12,11 @@ from dlup.tiling import TilingMode
 from numpy.typing import NDArray
 
 from itsper.annotations import get_most_invasive_region, offset_and_scale_tumorbed
+from itsper.data_manager import get_paired_data, open_db_session, summarize_database
 from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes
-from itsper.utils import (
-    check_if_roi_is_present,
-    make_csv_entries,
-    make_directories_if_needed,
-)
+from itsper.utils import check_if_roi_is_present, make_csv_entries, make_directories_if_needed
 from itsper.viz import assign_index_to_pixels, colorize, plot_visualization, render_visualization
-from itsper.data_manager import open_db_session, summarize_database, get_paired_data
 
 logger = get_logger(__name__)
 
@@ -58,8 +54,8 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     kwargs = {}
     offset_annotations: WsiAnnotations | None = None
     if (
-            image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
-            or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
+        image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
+        or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
     ):
         kwargs["overwrite_mpp"] = (0.25, 0.25)
     slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs)
@@ -121,7 +117,7 @@ def itsp_computer(
     inference_root: Path,
     output_path: Path,
     render_images: int = 1,
-    ) -> None:
+) -> None:
     session = open_db_session(manifest_path)
     summarize_database(session)
     data_rubric = get_paired_data(session)

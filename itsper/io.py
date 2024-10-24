@@ -1,8 +1,9 @@
 import logging
+
 import pyfiglet
 from rich.console import Console
 from rich.text import Text
-import time
+
 
 def get_logger(name: str) -> logging.Logger:
     # Create a custom logger
@@ -22,6 +23,9 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
+logger = get_logger("ITSPER")
+
+
 def display_ascii_text_with_circle():
     """Display ITSPER text in a retro style with a balanced colored circle on the same line, adding yellow highlights."""
     console = Console()
@@ -33,8 +37,14 @@ def display_ascii_text_with_circle():
     circle = [
         Text("      ◯ ◯ ◯ ◯ ◯      ", style="bold red"),  # Top of the circle (red)
         Text("    ◯ ", style="bold red") + Text("◯ ◯ ", style="bold red") + Text("◯ ◯ ◯ ◯  ", style="bold green"),
-        Text("  ◯ ◯ ", style="bold red") + Text("◯ ◯ ", style="bold yellow") + Text("◯ ◯ ◯ ", style="bold green") + Text("◯ ◯ ", style="bold red"),
-        Text("  ◯ ◯ ", style="bold red") + Text("◯ ◯ ", style="bold yellow") + Text("◯ ◯ ", style="bold green") + Text("◯ ◯ ◯ ", style="bold red"),
+        Text("  ◯ ◯ ", style="bold red")
+        + Text("◯ ◯ ", style="bold yellow")
+        + Text("◯ ◯ ◯ ", style="bold green")
+        + Text("◯ ◯ ", style="bold red"),
+        Text("  ◯ ◯ ", style="bold red")
+        + Text("◯ ◯ ", style="bold yellow")
+        + Text("◯ ◯ ", style="bold green")
+        + Text("◯ ◯ ◯ ", style="bold red"),
         Text("    ◯ ", style="bold red") + Text("◯ ◯ ◯ ◯ ◯ ", style="bold green") + Text("◯ ", style="bold red"),
         Text("      ◯ ◯ ◯ ◯ ◯      ", style="bold red"),  # Bottom of the circle (red)
     ]
@@ -69,4 +79,4 @@ def print_rich_statement(console):
 def display_launch_graphic():
     """Display ASCII text and the circle graphic in the terminal on the same line."""
     display_ascii_text_with_circle()
-
+    logger.info("ITSPER is not intended for clinical use")

@@ -63,5 +63,3 @@ def make_directories_if_needed(folder: Path, output_path: Path) -> None:
     if not (output_path / folder.name).is_dir():
         # Make the directory if it doesn't exist in the output path
         (output_path / folder.name).mkdir()
-
-

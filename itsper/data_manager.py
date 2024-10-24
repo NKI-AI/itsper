@@ -1,13 +1,14 @@
-from sqlalchemy import create_engine, Column, DateTime, Enum, ForeignKey, Integer, String, func, Float
-from sqlalchemy.orm import Mapped, relationship, sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
 from pathlib import Path
 from typing import List
-from itsper.types import ItsperAnnotationTypes
+
 from rich.console import Console
 from rich.table import Table
-from itsper.io import get_logger
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Mapped, relationship, sessionmaker
 
+from itsper.io import get_logger
+from itsper.types import ItsperAnnotationTypes
 
 Base = declarative_base()
 console = Console()
@@ -41,6 +42,7 @@ class Annotation(Base):
 
 class Patient(Base):
     """Patient table."""
+
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True)
