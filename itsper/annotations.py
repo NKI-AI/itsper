@@ -1,12 +1,9 @@
-from typing import Any, Dict, List, Union
-
 from dlup import SlideImage
 from dlup.annotations import AnnotationClass, AnnotationType
 from dlup.annotations import Polygon as DlupPolygon
 from dlup.annotations import WsiAnnotations
 from shapely import Point
 from shapely.affinity import affine_transform, translate
-from shapely.geometry import mapping
 
 from itsper.types import ItsperAnnotationTypes
 
