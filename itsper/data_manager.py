@@ -1,12 +1,21 @@
-from sqlalchemy import create_engine, Text, Column, DateTime, Enum, ForeignKey, Integer, String, func, UniqueConstraint, Float
-from sqlalchemy.orm import Mapped, relationship, sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
 from pathlib import Path
 from typing import List
+
+from rich.console import Console
+from rich.table import Table
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine, func
+from sqlalchemy.orm import Mapped, relationship, sessionmaker, DeclarativeBase, Session
+
+from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes
 
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
+
+
+console = Console()
+logger = get_logger(__name__)
 
 
 class ItsperManifest(Base):
@@ -23,9 +32,9 @@ class ItsperManifest(Base):
 class Annotation(Base):
     __tablename__ = "annotations"
 
+    filename = Column(String, nullable=False)
     id = Column(Integer, primary_key=True, autoincrement=True)
     annotation_type = Column(Enum(ItsperAnnotationTypes), nullable=False)
-    data = Column(Text, nullable=False)  # This could store JSON-like data for x, y coordinates or other properties
 
     image_id = Column(Integer, ForeignKey("images.id"), nullable=False)
     inference_image_id = Column(Integer, ForeignKey("inference_images.id"), nullable=True)  # Optional
@@ -36,6 +45,7 @@ class Annotation(Base):
 
 class Patient(Base):
     """Patient table."""
+
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True)
@@ -58,6 +68,7 @@ class Image(Base):
     height = Column(Integer, nullable=False)
     width = Column(Integer, nullable=False)
     reader = Column(String, nullable=False)
+    overwrite_mpp = Column(Float, nullable=True)
 
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
 
@@ -77,6 +88,7 @@ class InferenceImage(Base):
     height = Column(Integer, nullable=False)
     width = Column(Integer, nullable=False)
     reader = Column(String, nullable=False)
+    tile_size = Column(Integer, nullable=False)
 
     # Foreign key linking to the Image table
     image_id = Column(Integer, ForeignKey("images.id"), nullable=False)
@@ -94,13 +106,13 @@ class ITSPScore(Base):
     __tablename__ = "human_itsp"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    score = Column(Float, nullable=False)  # ITSP score given by a human observer
+    score = Column(Float, nullable=True)  # ITSP score given by a human observer
     image_id = Column(Integer, ForeignKey("images.id"), nullable=False)
 
     image = relationship("Image", back_populates="human_itsp")
 
 
-def create_session(db_path: Path):
+def create_session(db_path: Path) -> Session:
     """
     Creates the database for computing itsp database and its schema.
     """
@@ -108,3 +120,57 @@ def create_session(db_path: Path):
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)
     return session()
+
+
+def open_db_session(database_path: Path) -> Session:
+    """Open a session for interacting with the prediction database."""
+    engine = create_engine(f"sqlite:///{database_path}")
+    session = sessionmaker(bind=engine)
+    return session()
+
+
+def get_paired_data(session: Session) -> List[tuple[Image, InferenceImage, Annotation, ITSPScore]]:
+    """Retrieve paired tuples of image, inference image, annotation, and ITSP score."""
+    paired_data = []
+
+    # Querying for all images in the database
+    images = session.query(Image).all()
+
+    for image in images:
+        # Get corresponding inference image
+        inference_image = session.query(InferenceImage).filter_by(image_id=image.id).first()
+        # Get corresponding annotation (if you have an Annotation table in the schema)
+        annotation = session.query(Annotation).filter_by(image_id=image.id).first()
+        # Get ITSP score if available
+        itsp_score = session.query(ITSPScore).filter_by(image_id=image.id).first()
+
+        # Create a tuple of the retrieved data (image, inference image, annotation, ITSP score)
+        paired_data.append((image, inference_image, annotation, itsp_score))
+
+    return paired_data
+
+
+def summarize_database(session: Session) -> None:
+    """Print a summary of the database contents using rich formatting and logger."""
+    logger.info("Summarizing the database contents from the manifest...")
+    manifest_name = session.query(ItsperManifest).first().name
+    total_images = session.query(Image).count()
+    total_inference_images = session.query(InferenceImage).count()
+    total_annotations = session.query(Annotation).count()
+    total_itsp_scores = session.query(ITSPScore).count()
+    annotation_type = session.query(Annotation.annotation_type).distinct().all()[0][0].value
+    # Create a rich table for formatted output
+    table = Table(title="Database Summary")
+
+    # Define table columns
+    table.add_column("Category", style="bold magenta")
+    table.add_column("Count", justify="right")
+
+    # Add rows with the summary information
+    table.add_row("Manifest Name", manifest_name)
+    table.add_row("Total Images", str(total_images))
+    table.add_row("Total Inference Images", str(total_inference_images))
+    table.add_row("Total Annotations", str(total_annotations))
+    table.add_row("Type of Annotations", annotation_type)
+    table.add_row("Total ITSP Scores", str(total_itsp_scores))
+    console.print(table)

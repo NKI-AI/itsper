@@ -1,34 +1,28 @@
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any
 
 import numpy as np
-import pandas as pd
 from dlup import SlideImage
 from dlup._image import Resampling
 from dlup.annotations import WsiAnnotations
 from dlup.backends import ImageBackend
-from dlup.data.dataset import TiledWsiDataset
+from dlup.data.dataset import TiledWsiDataset, RegionFromWsiDatasetSample
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
 from numpy.typing import NDArray
 
 from itsper.annotations import get_most_invasive_region, offset_and_scale_tumorbed
+from itsper.data_manager import get_paired_data, open_db_session, summarize_database
 from itsper.io import get_logger
-from itsper.types import ItsperAnnotationTypes, ITSPScoringSheetHeaders
-from itsper.utils import (
-    check_if_roi_is_present,
-    check_integrity_of_files,
-    get_list_of_files,
-    make_csv_entries,
-    make_directories_if_needed,
-)
+from itsper.types import ItsperAnnotationTypes
+from itsper.utils import check_if_roi_is_present, make_csv_entries, make_directories_if_needed
 from itsper.viz import assign_index_to_pixels, colorize, plot_visualization, render_visualization
 
 logger = get_logger(__name__)
 
 
 def get_class_pixels(
-    sample: dict[str, Any]
+        sample: RegionFromWsiDatasetSample,
 ) -> tuple[NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_]]:
     """
     Obtain the pixels corresponding to each class and the region of interest.
@@ -37,7 +31,7 @@ def get_class_pixels(
     stroma_mask = (curr_mask == 1).astype(np.uint8)
     tumor_mask = (curr_mask == 2).astype(np.uint8)
     other_mask = (curr_mask == 3).astype(np.uint8)
-    roi = sample["annotation_data"]["roi"]
+    roi = sample["annotation_data"]["roi"]  # type: ignore
     return curr_mask, stroma_mask, tumor_mask, other_mask, roi
 
 
@@ -57,9 +51,15 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     native_mpp_for_inference: float
         The microns per pixel at which the images need to be rendered.
     """
+    kwargs = {}
+    a_type: ItsperAnnotationTypes | None = None
     offset_annotations: WsiAnnotations | None = None
-
-    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil")
+    if (
+            image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
+            or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
+    ):
+        kwargs["overwrite_mpp"] = (0.25, 0.25)
+    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs) # type: ignore
     scaling = slide_image.get_scaling(native_mpp_for_inference)
     scaled_wsi_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path)
@@ -91,7 +91,7 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     return setup_dict
 
 
-def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> tuple[float, float, float, float]:
+def get_itsp_score(image_dataset: TiledWsiDataset) -> tuple[float, float, float, float]:
     total_tumor = 0
     total_stroma = 0
     total_others = 0
@@ -112,51 +112,34 @@ def get_itsp_score(image_dataset: Generator[dict[str, Any], int, None]) -> tuple
 
 
 def itsp_computer(
-    output_path: Path,
-    images_path: Path,
-    inference_path: Path,
-    annotations_path: Optional[Path],
-    native_mpp_for_inference: float,
-    tile_size: tuple[int, int],
-    render_images: bool = True,
+        manifest_path: Path,
+        images_root: Path,
+        annotations_root: Path,
+        inference_root: Path,
+        output_path: Path,
+        render_images: int = 1,
 ) -> None:
-    logger.info(f"Looking into slides from {images_path.name}")
-    logger.info("Loading the ITSP scoring sheet...")
-    human_itsp_score = None
-    try:
-        itsp_scoring_sheet = pd.read_csv(
-            f"{str(annotations_path)}/itsp.txt",
-            delimiter="\t",
-            header=None,
-            usecols=[ITSPScoringSheetHeaders.SLIDE_ID.value, ITSPScoringSheetHeaders.ITSP_SCORE.value],
-        )
-    except FileNotFoundError as error:
-        logger.info(f"{error}: Slidescore scoring sheet for ITSP not found to render human scores.")
-        itsp_scoring_sheet = None
+    session = open_db_session(manifest_path)
+    summarize_database(session)
+    data_rubric = get_paired_data(session)
 
-    folder_dictionary = check_integrity_of_files(images_path, inference_path, annotations_path)
-    image_files, annotation_files, inference_files = get_list_of_files(folder_dictionary)
-    for inference_file in inference_files:
-        slide_id = inference_file.stem
-        wsi_path = [image_file for image_file in image_files if image_file.stem == slide_id]
-        if len(wsi_path) == 0:
-            logger.info(f"{slide_id} has no corresponding image. Skipping it.")
-            continue
-        slide_annotation_path = []
-        if annotation_files is not None:
-            slide_annotation_path = [
-                annotation_file for annotation_file in annotation_files if annotation_file.parent.name == slide_id
-            ]
-            if len(slide_annotation_path) > 0:
-                make_directories_if_needed(folder=images_path, output_path=output_path)
-            else:
-                logger.info(f"{slide_id} has no annotation. Skipping it.")
-                continue
+    for image, inference_image, annotation, itsp_score in data_rubric:
+        kwargs = {}
+        slide_id = Path(image.filename).stem
+        wsi_path = images_root / image.filename
+        slide_annotation_path = annotations_root / annotation.filename
+        inference_file = inference_root / inference_image.filename
+        native_mpp_for_inference = float(inference_image.mpp)
+        tile_size = (int(inference_image.tile_size), int(inference_image.tile_size))
 
-        setup_dictionary = setup(wsi_path[0], slide_annotation_path[0], native_mpp_for_inference)
+        make_directories_if_needed(folder=images_root, output_path=output_path)
+        setup_dictionary = setup(wsi_path, slide_annotation_path, native_mpp_for_inference)
+
+        if image.overwrite_mpp is not None:
+            kwargs["overwrite_mpp"] = (image.overwrite_mpp, image.overwrite_mpp)
 
         image_dataset = TiledWsiDataset.from_standard_tiling(
-            wsi_path[0],
+            wsi_path,
             mpp=native_mpp_for_inference,
             tile_size=tile_size,
             tile_overlap=(0, 0),
@@ -168,6 +151,7 @@ def itsp_computer(
             tile_mode=TilingMode.overflow,
             backend=ImageBackend.PYVIPS,
             internal_handler="vips",
+            **kwargs,  # type: ignore
         )
         prediction_slide_dataset = TiledWsiDataset.from_standard_tiling(
             inference_file,
@@ -184,20 +168,15 @@ def itsp_computer(
             backend=ImageBackend.TIFFFILE,
             internal_handler="vips",
         )
-        logger.info(f"Generating visualizations for: {slide_id}")
+        logger.info(f"Computing ITSP for: {slide_id}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
-        logger.info(f"The ITSP for image: {slide_id} is: {itsp}%")
+        human_itsp_score: float | None = itsp_score.score if itsp_score is not None else None
+        logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
         if render_images:
+            logger.info("Rendering visualization...")
             wsi_viz, pred_viz = render_visualization(
                 image_dataset, prediction_slide_dataset, tile_size, setup_dictionary
             )
-            if itsp_scoring_sheet is not None:
-                human_itsp_score = itsp_scoring_sheet.loc[
-                    itsp_scoring_sheet[ITSPScoringSheetHeaders.SLIDE_ID.value] == slide_id,
-                    ITSPScoringSheetHeaders.ITSP_SCORE.value,
-                ].item()
-            else:
-                logger.info("No human scores found. So, not rendering human scores.")
             plot_visualization(
                 wsi_viz,
                 pred_viz,
