@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 
 from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
 
-# TODO: Make this configurable
+
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
 OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")

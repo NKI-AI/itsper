@@ -4,8 +4,6 @@ from typing import Any, Optional
 
 from dlup.annotations import WsiAnnotations
 
-from itsper.types import ItsperAnnotationExtensions, ItsperInferenceExtensions, ItsperWsiExtensions
-
 
 def make_csv(output_path: Path) -> None:
     csv_file_path = output_path / Path("slide_details.csv")

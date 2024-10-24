@@ -27,7 +27,6 @@ logger = get_logger("ITSPER")
 
 
 def display_ascii_text_with_circle():
-    """Display ITSPER text in a retro style with a balanced colored circle on the same line, adding yellow highlights."""
     console = Console()
 
     # Generate the "ITSPER" text in a retro style using pyfiglet

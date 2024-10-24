@@ -22,6 +22,9 @@ install_requires = [
     "shapely",
     "pathlib",
     "typing",
+    "dlup==0.5.2",
+    "pyfiglet",
+    "rich",
 ]
 
 

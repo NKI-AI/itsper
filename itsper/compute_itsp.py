@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Generator, Optional
+from typing import Any, Generator
 
 import numpy as np
 from dlup import SlideImage
