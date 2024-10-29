@@ -24,19 +24,21 @@ Usage
 Type `itsper -h` to know more.
 
 License
--------
+=======
 itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
 
 Citing ITSPER
---------
-```
-@software{itsper,
-  author = {Pai, A.},
-  month = {10},
-  title = {{ITSPER: Intra-Tumoral Stroma Percentage Computer}},
-  url = {https://github.com/NKI-AI/dlup},
-  version = {0.1.1},
-  year = {2024}
-}
-```
+=============
 
+If you use ITSPER in your research, please use the following citation:
+
+.. code-block:: bibtex
+
+    @software{itsper,
+      author = {Pai, A.},
+      month = {10},
+      title = {{ITSPER: Intra-Tumoral Stroma Percentage Computer}},
+      url = {https://github.com/NKI-AI/itsper},
+      version = {0.1.1},
+      year = {2024}
+    }
