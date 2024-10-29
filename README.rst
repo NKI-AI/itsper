@@ -23,9 +23,6 @@ Usage
 =====
 Type `itsper -h` to know more.
 
-License
-=======
-itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
 
 Citing ITSPER
 =============
@@ -42,3 +39,7 @@ If you use ITSPER in your research, please use the following citation:
       version = {0.1.1},
       year = {2024}
     }
+
+License
+=======
+itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
