@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from rich.console import Console
 from rich.table import Table
@@ -129,14 +129,14 @@ def open_db_session(database_path: Path) -> Session:
     return session()
 
 
-def get_paired_data(session: Session) -> List[tuple[Image, InferenceImage, Annotation, ITSPScore]]:
-    """Retrieve paired tuples of image, inference image, annotation, and ITSP score."""
+def get_paired_data(session: Session) -> List[Tuple[int, Image, InferenceImage, Annotation, ITSPScore]]:
+    """Retrieve paired tuples of S.No, image, inference image, annotation, and ITSP score."""
     paired_data = []
 
     # Querying for all images in the database
     images = session.query(Image).all()
 
-    for image in images:
+    for index, image in enumerate(images, start=1):
         # Get corresponding inference image
         inference_image = session.query(InferenceImage).filter_by(image_id=image.id).first()
         # Get corresponding annotation (if you have an Annotation table in the schema)
@@ -144,8 +144,8 @@ def get_paired_data(session: Session) -> List[tuple[Image, InferenceImage, Annot
         # Get ITSP score if available
         itsp_score = session.query(ITSPScore).filter_by(image_id=image.id).first()
 
-        # Create a tuple of the retrieved data (image, inference image, annotation, ITSP score)
-        paired_data.append((image, inference_image, annotation, itsp_score))
+        # Create a tuple of the retrieved data with S.No as the first element
+        paired_data.append((index, image, inference_image, annotation, itsp_score))
 
     return paired_data
 

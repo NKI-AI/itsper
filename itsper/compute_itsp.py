@@ -123,7 +123,7 @@ def itsp_computer(
     summarize_database(session)
     data_rubric = get_paired_data(session)
 
-    for image, inference_image, annotation, itsp_score in data_rubric:
+    for index, image, inference_image, annotation, itsp_score in data_rubric:
         kwargs = {}
         slide_id = Path(image.filename).stem
         wsi_path = images_root / image.filename
@@ -168,7 +168,7 @@ def itsp_computer(
             backend=ImageBackend.TIFFFILE,
             internal_handler="vips",
         )
-        logger.info(f"Computing ITSP for: {slide_id}")
+        logger.info(f"Computing ITSP for case: {index}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
         human_itsp_score: float | None = itsp_score.score if itsp_score is not None else None
         logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
