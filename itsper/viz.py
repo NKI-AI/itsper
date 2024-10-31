@@ -5,13 +5,12 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from dlup.data.dataset import TiledWsiDataset
 import PIL
+from dlup.data.dataset import TiledWsiDataset
 from numpy._typing import NDArray
 from PIL import Image, ImageDraw
 
 from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
-
 
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")

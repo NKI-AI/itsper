@@ -4,7 +4,7 @@ from typing import List, Tuple
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine, func
-from sqlalchemy.orm import Mapped, relationship, sessionmaker, DeclarativeBase, Session
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, relationship, sessionmaker
 
 from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes

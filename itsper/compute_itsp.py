@@ -6,7 +6,7 @@ from dlup import SlideImage
 from dlup._image import Resampling
 from dlup.annotations import WsiAnnotations
 from dlup.backends import ImageBackend
-from dlup.data.dataset import TiledWsiDataset, RegionFromWsiDatasetSample
+from dlup.data.dataset import RegionFromWsiDatasetSample, TiledWsiDataset
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
 from numpy.typing import NDArray
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 def get_class_pixels(
-        sample: RegionFromWsiDatasetSample,
+    sample: RegionFromWsiDatasetSample,
 ) -> tuple[NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_]]:
     """
     Obtain the pixels corresponding to each class and the region of interest.
@@ -55,11 +55,11 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     a_type: ItsperAnnotationTypes | None = None
     offset_annotations: WsiAnnotations | None = None
     if (
-            image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
-            or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
+        image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
+        or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
     ):
         kwargs["overwrite_mpp"] = (0.25, 0.25)
-    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs) # type: ignore
+    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs)  # type: ignore
     scaling = slide_image.get_scaling(native_mpp_for_inference)
     scaled_wsi_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path)
@@ -112,12 +112,12 @@ def get_itsp_score(image_dataset: TiledWsiDataset) -> tuple[float, float, float,
 
 
 def itsp_computer(
-        manifest_path: Path,
-        images_root: Path,
-        annotations_root: Path,
-        inference_root: Path,
-        output_path: Path,
-        render_images: int = 1,
+    manifest_path: Path,
+    images_root: Path,
+    annotations_root: Path,
+    inference_root: Path,
+    output_path: Path,
+    render_images: int = 1,
 ) -> None:
     session = open_db_session(manifest_path)
     summarize_database(session)
