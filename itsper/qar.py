@@ -80,7 +80,7 @@ def create_frames(num_frames, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_
         current_vs = stroma_sizes[i] * 1000
         current_vt = tumor_sizes[i] * 1000
         current_qar = calculate_qar(current_vs, current_vt, dice_stroma, dice_tumor)
-        plot_qar_surface(ax_3d, Vs_values, Vt_values, QAR_grid, current_vs, current_vt, current_qar, trajectory_points)
+        plot_qar_surface(ax_3d, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_tumor, current_vs, current_vt, current_qar, trajectory_points)
 
         # Save the frame to a buffer instead of a file
         buffer = BytesIO()
@@ -109,8 +109,10 @@ def qar_surface_plotter(dice_stroma, dice_tumor, output_path):
     return gif_path
 
 
-def plot_qar_surface(ax, vs_grid, vt_grid, qar_grid, vs, vt, current_qar, trajectory_points):
+def plot_qar_surface(ax, vs_grid, vt_grid, qar_grid,d_s, d_t, vs, vt, current_qar, trajectory_points):
     ax.plot_surface(vs_grid, vt_grid, qar_grid, cmap="coolwarm", alpha=1)
+    ax.text2D(0.04, 0.96, f"Dice stroma: {d_s}, Dice tumor: {d_t}",
+              transform=ax.transAxes, fontsize=10, color="black")
     ax.set_xlabel("Tumor Volume (Vt)", fontsize=10, labelpad=8)
     ax.set_ylabel("Stroma Volume (Vs)", fontsize=10, labelpad=8)
     ax.set_zlabel("QAR (%)", fontsize=10, labelpad=8)

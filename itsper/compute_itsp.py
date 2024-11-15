@@ -132,7 +132,7 @@ def itsp_computer(
         native_mpp_for_inference = float(inference_image.mpp)
         tile_size = (int(inference_image.tile_size), int(inference_image.tile_size))
 
-        make_directories_if_needed(folder=images_root, output_path=output_path)
+        make_directories_if_needed(output_path=output_path)
         setup_dictionary = setup(wsi_path, slide_annotation_path, native_mpp_for_inference)
 
         if image.overwrite_mpp is not None:
