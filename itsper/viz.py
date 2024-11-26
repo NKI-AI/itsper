@@ -180,7 +180,7 @@ def plot_visualization(
     font_size = max(7, min(plt.xlim()[1], plt.xlim()[0]) // 20)
     if human_itsp_score:
         plt.text(50, 0, f"Human score:{human_itsp_score} %", fontsize=font_size)
-    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{ai_itsp_score} %", fontsize=font_size)
+    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{round(ai_itsp_score)} %", fontsize=font_size)
     plt.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=font_size, loc="upper right")
     plt.savefig(output_file_path, dpi=1000)
     plt.close()

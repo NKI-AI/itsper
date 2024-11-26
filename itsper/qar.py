@@ -11,14 +11,14 @@ from itsper.io import get_logger
 logger = get_logger(__name__)
 
 
-def calculate_qar(vs, vt, d_s, d_t) -> float:
+def calculate_qar(vs, vt, d_s, d_t) -> tuple[float, float]:
     epsilon_over_stroma = (2 * vs) / d_s - 2 * vs
     epsilon_under_stroma = (2 * vs * (1 - d_s)) / (2 - d_s)
     epsilon_over_tumor = (2 * vt) / d_t - 2 * vt
     epsilon_under_tumor = (2 * vt * (1 - d_t)) / (2 - d_t)
     itsp_high = (vs + epsilon_over_stroma) / ((vs + epsilon_over_stroma) + (vt - epsilon_under_tumor))
     itsp_low = (vs - epsilon_under_stroma) / ((vs - epsilon_under_stroma) + (vt + epsilon_over_tumor))
-    return (itsp_high - itsp_low) * 100
+    return itsp_high, itsp_low
 
 
 def plot_random_colored_circle(ax, tumor_volume, stroma_volume, resolution=500, cluster_size=10):
@@ -79,7 +79,8 @@ def create_frames(num_frames, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_
         ax_3d = fig.add_subplot(122, projection="3d")
         current_vs = stroma_sizes[i] * 1000
         current_vt = tumor_sizes[i] * 1000
-        current_qar = calculate_qar(current_vs, current_vt, dice_stroma, dice_tumor)
+        high, low = calculate_qar(current_vs, current_vt, dice_stroma, dice_tumor)
+        current_qar = (high - low) * 100
         plot_qar_surface(ax_3d, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_tumor, current_vs, current_vt, current_qar, trajectory_points)
 
         # Save the frame to a buffer instead of a file
@@ -100,9 +101,9 @@ def qar_surface_plotter(dice_stroma, dice_tumor, output_path):
     vs_values = np.linspace(100, 1000, 50)
     vt_values = np.linspace(100, 1000, 50)
     vs_grid, vt_grid = np.meshgrid(vs_values, vt_values)
-    qar_grid = calculate_qar(vs_grid, vt_grid, dice_stroma, dice_tumor)
+    high, low = calculate_qar(vs_grid, vt_grid, dice_stroma, dice_tumor)
 
-    frames = create_frames(num_frames, vs_grid, vt_grid, qar_grid, dice_stroma, dice_tumor)
+    frames = create_frames(num_frames, vs_grid, vt_grid, (high - low)*100, dice_stroma, dice_tumor)
     gif_path = f"{output_path}/qar_variation.gif"
     imageio.mimsave(gif_path, frames, duration=600, loop=0)
     logger.info(f"QAR surface plotting completed. GIF saved at {gif_path}")

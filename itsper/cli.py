@@ -49,7 +49,7 @@ def main() -> None:
         render_images = args.render_images
         itsp_computer(manifest_path, images_root, annotations_root, inference_root, output_path, render_images)
 
-    elif args.mode == "qar":
+    elif args.mode == "simulate_qar":
         output_path = Path(args.output_path)
         if args.simulation_type == "simulate-segmentation-errors":
             simulate_segmentation_errors(output_path)

@@ -17,6 +17,7 @@ from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes
 from itsper.utils import check_if_roi_is_present, make_csv_entries, make_directories_if_needed
 from itsper.viz import assign_index_to_pixels, colorize, plot_visualization, render_visualization
+from itsper.qar import calculate_qar
 
 logger = get_logger(__name__)
 
@@ -121,7 +122,7 @@ def itsp_computer(
 ) -> None:
     session = open_db_session(manifest_path)
     summarize_database(session)
-    data_rubric = get_paired_data(session)
+    dice_scores, data_rubric = get_paired_data(session)
 
     for index, image, inference_image, annotation, itsp_score in data_rubric:
         kwargs = {}
@@ -170,6 +171,8 @@ def itsp_computer(
         )
         logger.info(f"Computing ITSP for case: {index}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
+        if dice_scores is not None:
+            itsp_high, itsp_low = calculate_qar(total_stroma, total_tumor, dice_scores.stroma_dice, dice_scores.tumor_dice)
         human_itsp_score: float | None = itsp_score.score if itsp_score is not None else None
         logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
         if render_images:
@@ -186,6 +189,7 @@ def itsp_computer(
                 output_path=output_path,
                 slide_id=slide_id,
                 vizualization_type=setup_dictionary["annotation_type"],
+                qar=(itsp_high*100, itsp_low*100),
             )
 
         make_csv_entries(

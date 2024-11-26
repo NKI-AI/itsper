@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Type, Any
 
 from rich.console import Console
 from rich.table import Table
@@ -18,6 +18,28 @@ console = Console()
 logger = get_logger(__name__)
 
 
+class DiceScores(Base):
+    __tablename__ = "dice_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tumor_dice = Column(Float, nullable=True)
+    stroma_dice = Column(Float, nullable=True)
+
+    # Foreign keys for optional relationships
+    manifest_id = Column(Integer, ForeignKey("manifest.id"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
+    image_id = Column(Integer, ForeignKey("images.id"), nullable=True)
+    inference_image_id = Column(Integer, ForeignKey("inference_images.id"), nullable=True)
+    annotation_id = Column(Integer, ForeignKey("annotations.id"), nullable=True)
+
+    # Back-populates for optional relationships
+    manifest = relationship("ItsperManifest", back_populates="dice_scores")
+    patient = relationship("Patient", back_populates="dice_scores")
+    image = relationship("Image", back_populates="dice_scores")
+    inference_image = relationship("InferenceImage", back_populates="dice_scores")
+    annotation = relationship("Annotation", back_populates="dice_scores")
+
+
 class ItsperManifest(Base):
     __tablename__ = "manifest"
 
@@ -27,6 +49,7 @@ class ItsperManifest(Base):
     name = Column(String, unique=True)
 
     patients = relationship("Patient", back_populates="manifest")
+    dice_scores = relationship("DiceScores", back_populates="manifest")
 
 
 class Annotation(Base):
@@ -41,11 +64,10 @@ class Annotation(Base):
 
     image = relationship("Image", back_populates="annotations")
     inference_image = relationship("InferenceImage", back_populates="annotations")
+    dice_scores = relationship("DiceScores", back_populates="annotation")
 
 
 class Patient(Base):
-    """Patient table."""
-
     __tablename__ = "patients"
 
     id = Column(Integer, primary_key=True)
@@ -57,6 +79,7 @@ class Patient(Base):
     manifest: Mapped["ItsperManifest"] = relationship("ItsperManifest", back_populates="patients")
     images: Mapped[List["Image"]] = relationship("Image", back_populates="patient")
     inference_images: Mapped[List["InferenceImage"]] = relationship("InferenceImage", back_populates="patient")
+    dice_scores = relationship("DiceScores", back_populates="patient")
 
 
 class Image(Base):
@@ -74,9 +97,10 @@ class Image(Base):
 
     # Relationships
     annotations = relationship("Annotation", back_populates="image")
-    inference_image = relationship("InferenceImage", back_populates="image", uselist=False)  # One-to-one relationship
+    inference_image = relationship("InferenceImage", back_populates="image", uselist=False)
     human_itsp = relationship("ITSPScore", back_populates="image")
     patient = relationship("Patient", back_populates="images")
+    dice_scores = relationship("DiceScores", back_populates="image")
 
 
 class InferenceImage(Base):
@@ -98,8 +122,9 @@ class InferenceImage(Base):
 
     # Relationships
     annotations = relationship("Annotation", back_populates="inference_image")
-    image = relationship("Image", back_populates="inference_image")  # Reference to the Image table
+    image = relationship("Image", back_populates="inference_image")
     patient = relationship("Patient", back_populates="inference_images")
+    dice_scores = relationship("DiceScores", back_populates="inference_image")
 
 
 class ITSPScore(Base):
@@ -108,7 +133,6 @@ class ITSPScore(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     score = Column(Float, nullable=True)  # ITSP score given by a human observer
     image_id = Column(Integer, ForeignKey("images.id"), nullable=False)
-
     image = relationship("Image", back_populates="human_itsp")
 
 
@@ -129,9 +153,12 @@ def open_db_session(database_path: Path) -> Session:
     return session()
 
 
-def get_paired_data(session: Session) -> List[Tuple[int, Image, InferenceImage, Annotation, ITSPScore]]:
+def get_paired_data(session: Session) -> tuple[Type[DiceScores] | None, list[
+    tuple[Any, Any, Type[InferenceImage] | None, Type[Annotation] | None, Type[ITSPScore] | None]]]:
     """Retrieve paired tuples of S.No, image, inference image, annotation, and ITSP score."""
     paired_data = []
+    # Obtain the global dice scores
+    dice_scores = session.query(DiceScores).first()
 
     # Querying for all images in the database
     images = session.query(Image).all()
@@ -143,11 +170,10 @@ def get_paired_data(session: Session) -> List[Tuple[int, Image, InferenceImage, 
         annotation = session.query(Annotation).filter_by(image_id=image.id).first()
         # Get ITSP score if available
         itsp_score = session.query(ITSPScore).filter_by(image_id=image.id).first()
-
         # Create a tuple of the retrieved data with S.No as the first element
         paired_data.append((index, image, inference_image, annotation, itsp_score))
 
-    return paired_data
+    return dice_scores, paired_data
 
 
 def summarize_database(session: Session) -> None:
