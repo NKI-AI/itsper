@@ -6,7 +6,7 @@ from dlup import SlideImage
 from dlup._image import Resampling
 from dlup.annotations import WsiAnnotations
 from dlup.backends import ImageBackend
-from dlup.data.dataset import TiledWsiDataset, RegionFromWsiDatasetSample
+from dlup.data.dataset import RegionFromWsiDatasetSample, TiledWsiDataset
 from dlup.data.transforms import ConvertAnnotationsToMask
 from dlup.tiling import TilingMode
 from numpy.typing import NDArray
@@ -17,12 +17,13 @@ from itsper.io import get_logger
 from itsper.types import ItsperAnnotationTypes
 from itsper.utils import check_if_roi_is_present, make_csv_entries, make_directories_if_needed
 from itsper.viz import assign_index_to_pixels, colorize, plot_visualization, render_visualization
+from itsper.qar import calculate_qar
 
 logger = get_logger(__name__)
 
 
 def get_class_pixels(
-        sample: RegionFromWsiDatasetSample,
+    sample: RegionFromWsiDatasetSample,
 ) -> tuple[NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_], NDArray[np.int_]]:
     """
     Obtain the pixels corresponding to each class and the region of interest.
@@ -55,11 +56,11 @@ def setup(image_path: Path, annotation_path: Path, native_mpp_for_inference: flo
     a_type: ItsperAnnotationTypes | None = None
     offset_annotations: WsiAnnotations | None = None
     if (
-            image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
-            or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
+        image_path.name == "TCGA-OL-A5RY-01Z-00-DX1.AE4E9D74-FC1C-4C1E-AE6D-5DF38899BBA6.svs"
+        or image_path.name == "TCGA-OL-A5RW-01Z-00-DX1.E16DE8EE-31AF-4EAF-A85F-DB3E3E2C3BFF.svs"
     ):
         kwargs["overwrite_mpp"] = (0.25, 0.25)
-    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs) # type: ignore
+    slide_image = SlideImage.from_file_path(image_path, internal_handler="pil", **kwargs)  # type: ignore
     scaling = slide_image.get_scaling(native_mpp_for_inference)
     scaled_wsi_size = slide_image.get_scaled_size(scaling)
     annotations = WsiAnnotations.from_geojson(annotation_path)
@@ -112,16 +113,16 @@ def get_itsp_score(image_dataset: TiledWsiDataset) -> tuple[float, float, float,
 
 
 def itsp_computer(
-        manifest_path: Path,
-        images_root: Path,
-        annotations_root: Path,
-        inference_root: Path,
-        output_path: Path,
-        render_images: int = 1,
+    manifest_path: Path,
+    images_root: Path,
+    annotations_root: Path,
+    inference_root: Path,
+    output_path: Path,
+    render_images: int = 1,
 ) -> None:
     session = open_db_session(manifest_path)
     summarize_database(session)
-    data_rubric = get_paired_data(session)
+    dice_scores, data_rubric = get_paired_data(session)
 
     for index, image, inference_image, annotation, itsp_score in data_rubric:
         kwargs = {}
@@ -132,7 +133,7 @@ def itsp_computer(
         native_mpp_for_inference = float(inference_image.mpp)
         tile_size = (int(inference_image.tile_size), int(inference_image.tile_size))
 
-        make_directories_if_needed(folder=images_root, output_path=output_path)
+        make_directories_if_needed(output_path=output_path)
         setup_dictionary = setup(wsi_path, slide_annotation_path, native_mpp_for_inference)
 
         if image.overwrite_mpp is not None:
@@ -170,6 +171,8 @@ def itsp_computer(
         )
         logger.info(f"Computing ITSP for case: {index}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
+        if dice_scores is not None:
+            itsp_high, itsp_low = calculate_qar(total_stroma, total_tumor, dice_scores.stroma_dice, dice_scores.tumor_dice)
         human_itsp_score: float | None = itsp_score.score if itsp_score is not None else None
         logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
         if render_images:
@@ -186,6 +189,7 @@ def itsp_computer(
                 output_path=output_path,
                 slide_id=slide_id,
                 vizualization_type=setup_dictionary["annotation_type"],
+                qar=(itsp_high*100, itsp_low*100),
             )
 
         make_csv_entries(

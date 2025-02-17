@@ -5,13 +5,12 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from dlup.data.dataset import TiledWsiDataset
 import PIL
+from dlup.data.dataset import TiledWsiDataset
 from numpy._typing import NDArray
 from PIL import Image, ImageDraw
 
 from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
-
 
 TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
 STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
@@ -181,7 +180,7 @@ def plot_visualization(
     font_size = max(7, min(plt.xlim()[1], plt.xlim()[0]) // 20)
     if human_itsp_score:
         plt.text(50, 0, f"Human score:{human_itsp_score} %", fontsize=font_size)
-    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{ai_itsp_score} %", fontsize=font_size)
+    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{round(ai_itsp_score)} %", fontsize=font_size)
     plt.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=font_size, loc="upper right")
     plt.savefig(output_file_path, dpi=1000)
     plt.close()

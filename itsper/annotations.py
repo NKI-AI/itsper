@@ -1,10 +1,11 @@
+from typing import Type
+
 from dlup import SlideImage
 from dlup.annotations import AnnotationClass, AnnotationType
 from dlup.annotations import Polygon as DlupPolygon
 from dlup.annotations import WsiAnnotations
 from shapely import Point
 from shapely.affinity import affine_transform, translate
-from typing import Type
 
 from itsper.types import ItsperAnnotationTypes
 
@@ -89,4 +90,3 @@ def get_most_invasive_region(
     return WsiAnnotations(most_invasive_region, [annotation_class]), WsiAnnotations(
         offset_most_invasive_region, [annotation_class]
     )
-
