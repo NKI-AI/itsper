@@ -1,7 +1,7 @@
 Intra-tumoral stroma percentage computer
 ========================================
 
-.. image:: 
+.. image:: https://github.com/NKI-AI/itsper/blob/main/assets/ITSP.png
    :alt: Illustration of outputs obtained on a TCGA breast resection using itsper
 
 itsper is a simple command line utility which can be used to compute the intra-tumoral stroma percentage (ITSP) biomarker from tissue segmentations of histopathological tumor lesions. It was developed at the `AI for Oncology lab <https://aiforoncology.nl>`_.
@@ -43,4 +43,3 @@ If you use ITSPER in your research, please use the following citation:
 License
 =======
 itsper is not intended for clinical use. It is licensed under the `MIT License <https://mit-license.org/>`_.
-
