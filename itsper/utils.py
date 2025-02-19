@@ -2,9 +2,6 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 
-from dlup.data.dataset import RegionFromWsiDatasetSample
-
-
 def make_csv(output_path: Path) -> None:
     csv_file_path = output_path / Path("slide_details.csv")
     if not csv_file_path.is_file():
@@ -23,9 +20,9 @@ def make_csv(output_path: Path) -> None:
             )  # Writing the header
 
 
-def check_if_roi_is_present(sample: RegionFromWsiDatasetSample) -> Any:
-    if sample.get("annotation_data", None) is not None:
-        roi = sample["annotation_data"]["roi"]
+def check_if_roi_is_present(sample) -> Any:
+    if sample.annotations.rois is not None:
+        roi = sample.annotations.rois.to_mask().numpy()
     else:
         roi = None
     return roi

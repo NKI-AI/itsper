@@ -153,13 +153,10 @@ def open_db_session(database_path: Path) -> Session:
     return session()
 
 
-def get_paired_data(session: Session) -> tuple[Type[DiceScores] | None, list[
-    tuple[Any, Any, Type[InferenceImage] | None, Type[Annotation] | None, Type[ITSPScore] | None]]]:
+def get_paired_data(session: Session) -> list[
+    tuple[Any, Any, Type[InferenceImage] | None, Type[Annotation] | None, Type[ITSPScore] | None]]:
     """Retrieve paired tuples of S.No, image, inference image, annotation, and ITSP score."""
     paired_data = []
-    # Obtain the global dice scores
-    dice_scores = session.query(DiceScores).first()
-
     # Querying for all images in the database
     images = session.query(Image).all()
 
@@ -173,7 +170,7 @@ def get_paired_data(session: Session) -> tuple[Type[DiceScores] | None, list[
         # Create a tuple of the retrieved data with S.No as the first element
         paired_data.append((index, image, inference_image, annotation, itsp_score))
 
-    return dice_scores, paired_data
+    return paired_data
 
 
 def summarize_database(session: Session) -> None:

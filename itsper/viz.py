@@ -1,22 +1,21 @@
 from pathlib import Path
 from typing import Any, Optional
 
-import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import PIL
 from dlup.data.dataset import TiledWsiDataset
 from numpy._typing import NDArray
-from PIL import Image, ImageDraw
-
+from PIL import Image, ImageDraw, ImageFont
 from itsper.types import ItsperAnnotationTypes, ItsperClassIndices
 
-TUMOR_PATCH = mpatches.Patch(color="red", label="Tumor")
-STROMA_PATCH = mpatches.Patch(color="green", label="Stroma")
-OTHER_PATCH = mpatches.Patch(color="yellow", label="Others")
-Image.MAX_IMAGE_PIXELS = 1000000 * 1000000
-
+remap_colors = {
+    0: (255, 255, 255),
+    1: (0, 255, 0),
+    2: (255, 0, 0),
+    3: (255, 255, 0)
+}
 
 def plot_2d(
     image: PIL.Image.Image,
@@ -63,141 +62,133 @@ def plot_2d(
 
 
 def colorize(image: Image) -> Image:
-    image_array = np.array(image)
-
-    # Define your class index to RGBA color map as arrays for vectorized replacement
-    # Including 255 for the alpha channel to indicate full opacity
-    color_map = {
-        0: np.array([0, 0, 0, 255]),  # Background (example)
-        1: np.array([0, 255, 0, 255]),  # Stroma - Green
-        2: np.array([255, 0, 0, 255]),  # Tumor - Red
-        3: np.array([255, 255, 0, 255]),  # Others - Yellow
-    }
-
+    # Convert to single channel if it's not already
+    if isinstance(image, np.ndarray):
+        image_array = image
+    else:
+        image_array = np.array(image)
+    
+    if len(image_array.shape) > 2:
+        image_array = image_array[:, :, 0]  # Take first channel if multi-channel
+    
     # Prepare an empty array for the colored image (4 channels for RGBA)
     colored_array = np.zeros((*image_array.shape, 4), dtype=np.uint8)
 
     # Apply the color map
-    for class_index, color in color_map.items():
+    for class_index, color in remap_colors.items():
         mask = image_array == class_index
-        # Use numpy broadcasting to set the color and alpha
-        colored_array[mask] = color
+        if mask.any():  # Only apply if this class exists in the tile
+            colored_array[mask, 0] = color[0]  # R
+            colored_array[mask, 1] = color[1]  # G
+            colored_array[mask, 2] = color[2]  # B
+            # Set alpha to 127 only for non-background classes (class_index > 0)
+            if class_index > 0:
+                colored_array[mask, 3] = 64  # Semi-transparent for actual classes
+            else:
+                colored_array[mask, 3] = 0    # Fully transparent for background
 
     # Convert the NumPy array back to a PIL image in RGBA mode
     colored_image = Image.fromarray(colored_array, mode="RGBA")
     return colored_image
 
 
-def render_visualization(
-    image_dataset: TiledWsiDataset,
-    prediction_dataset: TiledWsiDataset,
-    tile_size: tuple[int, int],
-    setup_dictionary: dict[str, Any],
-) -> tuple[Image, Image]:
-    wsi_background = Image.new("RGBA", setup_dictionary["scaled_wsi_size"], (255, 255, 255, 255))
-    prediction_background = Image.new("RGBA", setup_dictionary["scaled_wsi_size"], (255, 255, 255, 255))
+def create_canvas(dataset):
+    tile_size = dataset.tile_size
+    min_x, min_y, max_x, max_y = float("inf"), float("inf"), float("-inf"), float("-inf")
+    for sample in dataset:
+        coordinates = sample.coordinates
+        x0, y0 = coordinates
+        x1, y1 = x0 + tile_size[0], y0 + tile_size[1]
+        min_x, min_y = min(min_x, x0), min(min_y, y0)
+        max_x, max_y = max(max_x, x1), max(max_y, y1)
+    canvas_width = int(max_x - min_x)
+    canvas_height = int(max_y - min_y)
+    canvas = Image.new("RGBA", (canvas_width, canvas_height), (255, 255, 255, 0))
+    return canvas, min_x, min_y
 
-    for wsi_sample, prediction_sample in zip(image_dataset, prediction_dataset):
-        wsi_coords = np.array(wsi_sample["coordinates"])
 
-        wsi_box = tuple(np.array((*wsi_coords, *(wsi_coords + tile_size))).astype(int))
-        wsi_roi = wsi_sample["annotation_data"]["roi"]
+def render_visualization(dataset, inference_dataset, output_path: Path, slide_id: str, human_itsp_score: float, ai_itsp_score: float):
+    image_canvas, min_x, min_y = create_canvas(dataset)
+    # Fill the canvas with white to make it fully opaque
+    white_fill = Image.new('RGBA', image_canvas.size, (255, 255, 255, 255))
+    image_canvas = Image.alpha_composite(image_canvas, white_fill)
+    image_drawer = ImageDraw.Draw(image_canvas)
 
-        # Correct mode checking
-        if prediction_sample["image"].mode in ["L", "p"]:
-            prediction_sample["image"] = colorize(prediction_sample["image"])
-
-        prediction_tile = assign_index_to_pixels(prediction_sample["image"], roi=wsi_roi)
-        prediction_tile = np.where(prediction_tile == 0, 255, prediction_tile)
-
-        wsi_tile = np.asarray(wsi_sample["image"]) * wsi_roi[:, :, np.newaxis]
-        wsi_tile = np.where(wsi_tile == 0, 255, wsi_tile)
-
-        prediction_sample_viz = plot_2d(
-            Image.fromarray(prediction_tile.astype(np.uint8)),
-            mask=prediction_tile * wsi_roi,
-            mask_colors={1: "green", 2: "red", 3: "yellow"},
-        )
-
-        prediction_background.paste(prediction_sample_viz, wsi_box)
-        wsi_background.paste(Image.fromarray(wsi_tile.astype(np.uint8)), wsi_box)
-
-        wsi_drawer = ImageDraw.Draw(wsi_background)
-        prediction_drawer = ImageDraw.Draw(prediction_background)
-
-        if wsi_sample.get("annotations") and prediction_sample.get("annotations") is not None:
-            for polygon in wsi_sample["annotations"]:
-                x, y = polygon.exterior.xy
-                xy = []
+    prediction_canvas = image_canvas.copy()
+    prediction_drawer = ImageDraw.Draw(prediction_canvas)
+    canvas_min_x, canvas_min_y, canvas_max_x, canvas_max_y = float("inf"), float("inf"), float("-inf"), float("-inf")
+    
+    # First pass: Draw all tiles and colored overlays
+    for image_sample, inference_sample in zip(dataset, inference_dataset):
+        x_offset, y_offset = int(image_sample.coordinates[0] - min_x), int(image_sample.coordinates[1] - min_y)
+        image_array = inference_sample.image.numpy()
+        mask = inference_sample.annotations.rois.to_mask().numpy()
+        
+        # Expand mask dimensions to match image channels
+        mask = mask[..., np.newaxis].astype(np.uint8)  # Add channel dimension
+        mask = np.repeat(mask, image_array.shape[-1], axis=-1)  # Repeat for all channels
+        
+        # Apply mask
+        image_array = image_array * mask
+        tile = image_sample.image.numpy() * mask
+        tile = np.where(tile == 0, 255, tile)
+        tile = Image.fromarray(tile)
+        
+        # Create colored image
+        colored_image = colorize(image_array)
+        box = (x_offset, y_offset, x_offset + inference_dataset.tile_size[0], y_offset + inference_dataset.tile_size[1])
+        
+        # Paste the original tile first
+        image_canvas.paste(tile, box)
+        prediction_canvas.paste(tile, box)
+        
+        # Create a composite by alpha blending the colored inference with the original image
+        prediction_canvas.paste(colored_image, box, colored_image)
+        if image_sample.annotations and inference_sample.annotations is not None:
+            for polygon in image_sample.annotations.rois.get_geometries():  
+                x, y = polygon.to_shapely().exterior.xy
                 for x_coord, y_coord in zip(x, y):
-                    xy.append(x_coord + wsi_sample["coordinates"][0])
-                    xy.append(y_coord + wsi_sample["coordinates"][1])
-                wsi_drawer.polygon(xy, outline="black")
-                prediction_drawer.polygon(xy, outline="black")
-
-    cropped_wsi, cropped_prediction = crop_image(wsi_background, prediction_background, setup_dictionary)
-
-    return cropped_wsi, cropped_prediction
-
-
-def plot_visualization(
-    original_image: Image,
-    prediction_image: Image,
-    inference_file: Path,
-    human_itsp_score: Optional[float],
-    ai_itsp_score: float,
-    output_path: Path,
-    slide_id: str,
-    vizualization_type: ItsperAnnotationTypes,
-) -> None:
-    if vizualization_type == ItsperAnnotationTypes.MI_REGION:
-        extra_space = 1000
-    else:
-        extra_space = 1200
-    # Create a new image with space for the two images and additional text
-    viz_image = Image.new(
-        "RGBA",
-        (original_image.size[0] + prediction_image.size[0] + extra_space, original_image.size[1] + 10),
-        (255, 255, 255, 255),
-    )
-
-    # Paste the original and prediction images into the new image
-    viz_image.paste(original_image, (0, 0))
-    viz_image.paste(prediction_image, (original_image.size[0] + 150, 0))
-
-    # Convert to RGB (removing alpha channel)
-    viz_image = viz_image.convert("RGB")
-
-    # Save the visualization image
-    output_file_path = output_path / inference_file.parent.name / f"{slide_id}.png"
+                    x_point = x_coord + x_offset
+                    y_point = y_coord + y_offset
+                    # Keep track of max and min x and y coordinates
+                    canvas_min_x = min(canvas_min_x, x_point)
+                    canvas_max_x = max(canvas_max_x, x_point)
+                    canvas_min_y = min(canvas_min_y, y_point)
+                    canvas_max_y = max(canvas_max_y, y_point)
+    
+    image_canvas = image_canvas.convert("RGB")
+    prediction_canvas = prediction_canvas.convert("RGB")
+    # Crop the canvases to the minimum bounding box of the annotations
+    image_canvas = image_canvas.crop((canvas_min_x, canvas_min_y, canvas_max_x, canvas_max_y))
+    prediction_canvas = prediction_canvas.crop((canvas_min_x, canvas_min_y, canvas_max_x, canvas_max_y))
+    
+    # Put the two canvases side by side with extra space for text
+    extra_height = 70  # Space for text
+    viz_image = Image.new("RGB", (image_canvas.size[0] * 2, image_canvas.size[1] + extra_height), (255, 255, 255))
+    viz_image.paste(image_canvas, (0, 0))
+    viz_image.paste(prediction_canvas, (image_canvas.size[0], 0))
+    
+    # Add text using default font
+    drawer = ImageDraw.Draw(viz_image)
+    human_text = f"Human ITSP: {int(human_itsp_score)}%"
+    ai_text = f"AI ITSP: {int(ai_itsp_score)}%"
+    
+    # Try to load a system font, fall back to default if not available
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 50)
+    except OSError:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/dejavu/DejaVuSans.ttf", 50)
+        except OSError:
+            font = ImageFont.load_default()    
+    # Draw text
+    drawer.text((50, image_canvas.size[1] + 10), human_text, fill="black", font=font)
+    drawer.text((image_canvas.size[0] + 200, image_canvas.size[1] + 10), ai_text, fill="black", font=font)
+    
+    # Save the visualization
+    output_file_path = output_path / f"{slide_id}.png"
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    plt.imshow(viz_image)
-    plt.yticks([])
-    plt.xticks([])
-    plt.tight_layout()
-    plt.gca().set_axis_off()
-    font_size = max(7, min(plt.xlim()[1], plt.xlim()[0]) // 20)
-    if human_itsp_score:
-        plt.text(50, 0, f"Human score:{human_itsp_score} %", fontsize=font_size)
-    plt.text(int(plt.xlim()[1] / 2), 0, f"AI score:{round(ai_itsp_score)} %", fontsize=font_size)
-    plt.legend(handles=[TUMOR_PATCH, STROMA_PATCH, OTHER_PATCH], fontsize=font_size, loc="upper right")
-    plt.savefig(output_file_path, dpi=1000)
-    plt.close()
-
-
-def crop_image(
-    wsi_background: Image, prediction_background: Image, setup_dictionary: dict[str, Any]
-) -> tuple[Image, Image]:
-    x0, y0, x1, y1 = setup_dictionary["scaled_annotation_bounds"]
-    if setup_dictionary["annotation_type"] == ItsperAnnotationTypes.MI_REGION:
-        draw_fov_wsi = ImageDraw.Draw(wsi_background)
-        draw_fov_wsi.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
-        draw_fov_pred = ImageDraw.Draw(prediction_background)
-        draw_fov_pred.ellipse([(x0, y0), (x1, y1)], fill=None, outline="black", width=20)
-    original_tumor_bed = wsi_background.crop((x0, y0, x1, y1))
-    prediciton_tumor_bed = prediction_background.crop((x0, y0, x1, y1))
-    return original_tumor_bed, prediciton_tumor_bed
+    viz_image.save(output_file_path, dpi=(300, 300))
 
 
 def assign_index_to_pixels(image: Image, roi: Optional[NDArray[np.float_]] = None) -> NDArray[np.uint8]:
