@@ -157,7 +157,7 @@ def itsp_computer(
         logger.info(f"Computing ITSP for case: {index}")
         itsp, total_tumor, total_stroma, total_others = get_itsp_score(prediction_slide_dataset)
         human_itsp_score: float | None = itsp_score.score if itsp_score is not None else None
-        logger.info(f"| AI: {round(itsp)}%  |  Human: {human_itsp_score}%")
+        logger.info(f"| AI: {round(itsp)}%  |  Human: {int(human_itsp_score)}%")
         if render_images:
             logger.info("Rendering visualization...")
             render_visualization(
