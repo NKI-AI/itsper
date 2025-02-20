@@ -2,6 +2,7 @@ import csv
 from pathlib import Path
 from typing import Any, Optional
 
+
 def make_csv(output_path: Path) -> None:
     csv_file_path = output_path / Path("slide_details.csv")
     if not csv_file_path.is_file():

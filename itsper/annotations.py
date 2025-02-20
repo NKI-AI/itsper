@@ -5,8 +5,6 @@ from aifo.dlup.annotations import Polygon as DlupPolygon
 from aifo.dlup.annotations import SlideAnnotations
 from shapely import Point
 from shapely.affinity import affine_transform, translate
-import pdb
-import copy
 
 from itsper.types import ItsperAnnotationTypes
 
@@ -52,15 +50,17 @@ def offset_and_scale_tumorbed(
     return offset_annotations
 
 
-def get_most_invasive_region(
-    annotations: SlideAnnotations, base_mpp: float) -> SlideAnnotations:
+def get_most_invasive_region(annotations: SlideAnnotations, base_mpp: float) -> SlideAnnotations:
     """
     Get the most invasive region from the annotations.
 
     We take the following steps:
 
-    1. Scale the annotations to the base resolution of the .
-    2. Set the offset of the annotations.
+    1. Get the center point of the most invasive region.
+    2. Create a circle polygon from the center point with the calculated radius.
+    (We fix the radius to 1.05mm following the Leiden protocol.)
+    3. Make the circle polygon the most invasive region annotation.
+    4. Return the most invasive region annotation.
     """
     if len(annotations.available_classes) == 0:
         raise ValueError(f"No most invasive regions found!.")
@@ -91,31 +91,33 @@ def get_most_invasive_region(
     most_invasive_region_base.rebuild_rtree()
     return most_invasive_region_base
 
-def scale_and_offset_annotations(annotations: SlideAnnotations, scaling: float, slide_offset: tuple[float, float]) -> SlideAnnotations:
+
+def scale_and_offset_annotations(
+    annotations: SlideAnnotations, scaling: float, slide_offset: tuple[float, float]
+) -> SlideAnnotations:
     # Create a new instance
     scaled_annotations = SlideAnnotations()
-    
+
     # Copy each polygon
     for polygon in annotations.polygons:
         copy_polygon = polygon.clone()
         scaled_annotations.add_polygon(copy_polygon)
 
-    
     # Copy points if any
     for point in annotations.points:
         copy_point = point.clone()
         scaled_annotations.add_point(copy_point)
-    
+
     # Copy boxes if any
     for box in annotations.boxes:
         copy_box = box.clone()
         scaled_annotations.add_box(copy_box)
-    
+
     # Copy ROIs if any
     for roi in annotations.rois:
         copy_roi = roi.clone()
         scaled_annotations.add_roi(copy_roi)
-    
+
     # Apply scaling and offset
     scaled_annotations.scale(scaling)
     scaled_annotations.set_offset(slide_offset)

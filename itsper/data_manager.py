@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Tuple, Type, Any
+from typing import Any, List, Tuple, Type
 
 from rich.console import Console
 from rich.table import Table
@@ -153,8 +153,9 @@ def open_db_session(database_path: Path) -> Session:
     return session()
 
 
-def get_paired_data(session: Session) -> list[
-    tuple[Any, Any, Type[InferenceImage] | None, Type[Annotation] | None, Type[ITSPScore] | None]]:
+def get_paired_data(
+    session: Session,
+) -> list[tuple[Any, Any, Type[InferenceImage] | None, Type[Annotation] | None, Type[ITSPScore] | None]]:
     """Retrieve paired tuples of S.No, image, inference image, annotation, and ITSP score."""
     paired_data = []
     # Querying for all images in the database

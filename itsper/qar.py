@@ -32,7 +32,7 @@ def plot_random_colored_circle(ax, tumor_volume, stroma_volume, resolution=500, 
     y = np.linspace(-1, 1, resolution)
     xv, yv = np.meshgrid(x, y)
 
-    mask = xv ** 2 + yv ** 2 <= 1 ** 2
+    mask = xv**2 + yv**2 <= 1**2
 
     noise = np.random.rand(resolution, resolution)
     smoothed_noise = gaussian_filter(noise, sigma=cluster_size)
@@ -46,7 +46,7 @@ def plot_random_colored_circle(ax, tumor_volume, stroma_volume, resolution=500, 
     colors[stroma_region] = [0, 1, 0]  # Green for stroma
 
     ax.imshow(colors, extent=(-1, 1, -1, 1))
-    ax.text(0.35, 0.95, f"Stroma: {stroma_ratio*100:.2f}%", fontsize=10, transform=ax.transAxes, color='black')
+    ax.text(0.35, 0.95, f"Stroma: {stroma_ratio*100:.2f}%", fontsize=10, transform=ax.transAxes, color="black")
     ax.set_xlim(-1.2, 1.2)
     ax.set_ylim(-1.2, 1.2)
     ax.set_aspect("equal", "box")
@@ -54,10 +54,10 @@ def plot_random_colored_circle(ax, tumor_volume, stroma_volume, resolution=500, 
     ax.axis("off")
 
     legend_elements = [
-        Patch(facecolor='red', edgecolor='black', label='Tumor'),
-        Patch(facecolor='green', edgecolor='black', label='Stroma')
+        Patch(facecolor="red", edgecolor="black", label="Tumor"),
+        Patch(facecolor="green", edgecolor="black", label="Stroma"),
     ]
-    ax.legend(handles=legend_elements, loc='upper left', frameon=False)
+    ax.legend(handles=legend_elements, loc="upper left", frameon=False)
 
 
 def create_frames(num_frames, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_tumor):
@@ -81,7 +81,18 @@ def create_frames(num_frames, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_
         current_vt = tumor_sizes[i] * 1000
         high, low = calculate_qar(current_vs, current_vt, dice_stroma, dice_tumor)
         current_qar = (high - low) * 100
-        plot_qar_surface(ax_3d, Vs_values, Vt_values, QAR_grid, dice_stroma, dice_tumor, current_vs, current_vt, current_qar, trajectory_points)
+        plot_qar_surface(
+            ax_3d,
+            Vs_values,
+            Vt_values,
+            QAR_grid,
+            dice_stroma,
+            dice_tumor,
+            current_vs,
+            current_vt,
+            current_qar,
+            trajectory_points,
+        )
 
         # Save the frame to a buffer instead of a file
         buffer = BytesIO()
@@ -103,17 +114,16 @@ def qar_surface_plotter(dice_stroma, dice_tumor, output_path):
     vs_grid, vt_grid = np.meshgrid(vs_values, vt_values)
     high, low = calculate_qar(vs_grid, vt_grid, dice_stroma, dice_tumor)
 
-    frames = create_frames(num_frames, vs_grid, vt_grid, (high - low)*100, dice_stroma, dice_tumor)
+    frames = create_frames(num_frames, vs_grid, vt_grid, (high - low) * 100, dice_stroma, dice_tumor)
     gif_path = f"{output_path}/qar_variation.gif"
     imageio.mimsave(gif_path, frames, duration=600, loop=0)
     logger.info(f"QAR surface plotting completed. GIF saved at {gif_path}")
     return gif_path
 
 
-def plot_qar_surface(ax, vs_grid, vt_grid, qar_grid,d_s, d_t, vs, vt, current_qar, trajectory_points):
+def plot_qar_surface(ax, vs_grid, vt_grid, qar_grid, d_s, d_t, vs, vt, current_qar, trajectory_points):
     ax.plot_surface(vs_grid, vt_grid, qar_grid, cmap="coolwarm", alpha=1)
-    ax.text2D(0.04, 0.96, f"Dice stroma: {d_s}, Dice tumor: {d_t}",
-              transform=ax.transAxes, fontsize=10, color="black")
+    ax.text2D(0.04, 0.96, f"Dice stroma: {d_s}, Dice tumor: {d_t}", transform=ax.transAxes, fontsize=10, color="black")
     ax.set_xlabel("Tumor Volume (Vt)", fontsize=10, labelpad=8)
     ax.set_ylabel("Stroma Volume (Vs)", fontsize=10, labelpad=8)
     ax.set_zlabel("QAR (%)", fontsize=10, labelpad=8)
