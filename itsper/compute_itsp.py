@@ -137,7 +137,7 @@ def itsp_computer(
         wsi_path = images_root / image.filename
         slide_annotation_path = annotations_root / annotation.filename
         inference_file = inference_root / inference_image.filename
-        native_mpp_for_inference = 2
+        native_mpp_for_inference = inference_image.mpp
         tile_size = (int(inference_image.tile_size), int(inference_image.tile_size))
 
         make_directories_if_needed(output_path=output_path)
