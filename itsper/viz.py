@@ -51,7 +51,7 @@ def create_canvas(dataset):
 def render_visualization(
     dataset, inference_dataset, output_path: Path, slide_id: str, human_itsp_score: float, ai_itsp_score: float
 ):
-    image_canvas, min_x, min_y = create_canvas(dataset)
+    image_canvas, min_x, min_y = create_canvas(inference_dataset)
     # Fill the canvas with white to make it fully opaque
     white_fill = Image.new("RGBA", image_canvas.size, (255, 255, 255, 255))
     image_canvas = Image.alpha_composite(image_canvas, white_fill)
@@ -60,7 +60,7 @@ def render_visualization(
     canvas_min_x, canvas_min_y, canvas_max_x, canvas_max_y = float("inf"), float("inf"), float("-inf"), float("-inf")
 
     for image_sample, inference_sample in zip(dataset, inference_dataset):
-        x_offset, y_offset = int(image_sample.coordinates[0] - min_x), int(image_sample.coordinates[1] - min_y)
+        x_offset, y_offset = int(inference_sample.coordinates[0] - min_x), int(inference_sample.coordinates[1] - min_y)
         image_array = inference_sample.image.numpy()
         mask = inference_sample.annotations.rois.to_mask().numpy()
 
@@ -74,13 +74,12 @@ def render_visualization(
 
         colored_image = colorize(image_array)
         box = (x_offset, y_offset, x_offset + inference_dataset.tile_size[0], y_offset + inference_dataset.tile_size[1])
-
         image_canvas.paste(tile, box)
         prediction_canvas.paste(tile, box)
 
         prediction_canvas.paste(colored_image, box, colored_image)
-        if image_sample.annotations and inference_sample.annotations is not None:
-            for polygon in image_sample.annotations.rois.get_geometries():
+        if inference_sample.annotations and inference_sample.annotations is not None:
+            for polygon in inference_sample.annotations.rois.get_geometries():
                 x, y = polygon.to_shapely().exterior.xy
                 for x_coord, y_coord in zip(x, y):
                     x_point = x_coord + x_offset
