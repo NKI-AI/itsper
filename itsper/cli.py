@@ -3,7 +3,7 @@ from pathlib import Path
 
 from itsper.compute_itsp import itsp_computer
 from itsper.io import display_launch_graphic
-from itsper.qar import qar_surface_plotter, simulate_segmentation_errors
+from itsper.qar import qar_surface_plotter, simulate_segmentation_errors, plot_qar_3d
 
 
 def main() -> None:
@@ -26,7 +26,7 @@ def main() -> None:
     qar_parser.add_argument(
         "--simulation-type",
         required=True,
-        choices=["simulate-segmentation-errors", "plot-qar-surface"],
+        choices=["simulate-segmentation-errors", "plot-qar-surface", "plot-qar-for-dice-scores"],
         help="Type of QAR simulation: simulate segmentation errors or plot the QAR surface",
     )
 
@@ -49,7 +49,7 @@ def main() -> None:
         render_images = args.render_images
         itsp_computer(manifest_path, images_root, annotations_root, inference_root, output_path, render_images)
 
-    elif args.mode == "simulate_qar":
+    elif args.mode == "qar":
         output_path = Path(args.output_path)
         if args.simulation_type == "simulate-segmentation-errors":
             simulate_segmentation_errors(output_path)
@@ -58,6 +58,11 @@ def main() -> None:
             if args.tumor_dice is None or args.stroma_dice is None:
                 parser.error("tumor_dice and stroma_dice are required for plotting the QAR surface")
             qar_surface_plotter(args.tumor_dice, args.stroma_dice, output_path)
+
+        elif args.simulation_type == "plot-qar-for-dice-scores":
+            if args.tumor_dice is None or args.stroma_dice is None:
+                parser.error("tumor_dice and stroma_dice are required for plotting the QAR surface")
+            plot_qar_3d(args.tumor_dice, args.stroma_dice, output_path)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,75 @@ def calculate_qar(vs, vt, d_s, d_t) -> tuple[float, float]:
     itsp_low = (vs - epsilon_under_stroma) / ((vs - epsilon_under_stroma) + (vt + epsilon_over_tumor))
     return itsp_high, itsp_low
 
+# For given volumes of tumor and stroma, calculate the QAR for different values of dice scores.
+def calculate_qar_for_different_dice_scores():
+    vs = 500
+    vt = 500
+    dice_scores = np.linspace(0.1, 0.99, 50)
+    itsp_high_values = []
+    itsp_low_values = []
+    
+    # Use the same Dice score for both stroma and tumor for simplicity
+    for dice in dice_scores:
+        itsp_high, itsp_low = calculate_qar(vs, vt, dice, dice)
+        itsp_high_values.append(itsp_high)
+        itsp_low_values.append(itsp_low)
+    
+    return dice_scores, itsp_high_values, itsp_low_values
+
+# Plot the QAR for different values of dice scores.
+def plot_qar_for_different_dice_scores(dice_stroma, dice_tumor, output_path):
+    # Get data for plotting
+    dice_scores, itsp_high_values, itsp_low_values = calculate_qar_for_different_dice_scores()
+    
+    # Calculate the QAR (ambiguity) as the absolute difference between high and low ITSP values
+    qar_values = np.abs(np.array(itsp_high_values) - np.array(itsp_low_values)) * 100  # Convert to percentage
+    
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # First subplot: ITSP high and low values vs Dice score
+    ax1.plot(dice_scores, itsp_high_values, 'b-', label='ITSP High')
+    ax1.plot(dice_scores, itsp_low_values, 'r-', label='ITSP Low')
+    ax1.fill_between(dice_scores, itsp_high_values, itsp_low_values, alpha=0.2, color='gray', label='Ambiguity Range')
+    
+    # Mark the current dice scores if provided
+    if dice_stroma == dice_tumor:
+        current_dice = dice_stroma
+        current_high, current_low = calculate_qar(500, 500, current_dice, current_dice)
+        ax1.plot(current_dice, current_high, 'bo', markersize=8)
+        ax1.plot(current_dice, current_low, 'ro', markersize=8)
+        ax1.axvline(x=current_dice, color='green', linestyle='--', alpha=0.5)
+    
+    ax1.set_title('ITSP Bounds vs Dice Score')
+    ax1.set_xlabel('Dice Score')
+    ax1.set_ylabel('ITSP Value')
+    ax1.set_xlim(0.1, 1.0)
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+    
+    # Second subplot: QAR (ambiguity) vs Dice score
+    ax2.plot(dice_scores, qar_values, 'g-', linewidth=2)
+    
+    # Mark the current dice score if provided
+    if dice_stroma == dice_tumor:
+        current_qar = np.abs(current_high - current_low) * 100
+        ax2.plot(current_dice, current_qar, 'go', markersize=8)
+        ax2.axvline(x=current_dice, color='green', linestyle='--', alpha=0.5)
+    
+    ax2.set_title('Quantification Ambiguity Range (QAR) vs Dice Score')
+    ax2.set_xlabel('Dice Score')
+    ax2.set_ylabel('QAR (%)')
+    ax2.set_xlim(0.1, 1.0)
+    ax2.grid(True, alpha=0.3)
+    
+    # Add overall title
+    fig.suptitle('Diminishing Ambiguity in ITSP Quantification with Improving Dice Score', fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust layout to make room for suptitle
+    
+    # Save the figure
+    plt.savefig(output_path / "qar_for_different_dice_scores.png", dpi=300, bbox_inches='tight')
+    plt.close(fig)
 
 def plot_random_colored_circle(ax, tumor_volume, stroma_volume, resolution=500, cluster_size=10):
     total_volume = tumor_volume + stroma_volume
@@ -175,3 +244,104 @@ def simulate_segmentation_errors(output_path):
     plt.savefig(output_path / "vd_vs_error.png", dpi=300)
     plt.close(fig)
     logger.info(f"Segmentation error simulation completed. Image saved at {output_path/'vd_vs_error.png'}")
+
+def plot_qar_3d(tumor_dice, stroma_dice, output_path):
+    """
+    Create a 3D plot showing how QAR (itsp_high - itsp_low) varies with both tumor and stroma Dice scores.
+    
+    Args:
+        tumor_dice: Dice score for tumor segmentation
+        stroma_dice: Dice score for stroma segmentation
+        output_path: Path to save the output figure
+    """
+    # Create a grid of Dice scores
+    dice_values = np.linspace(0.1, 0.99, 30)  # Using 30 points for better performance
+    dice_stroma_grid, dice_tumor_grid = np.meshgrid(dice_values, dice_values)
+    
+    # Initialize QAR grid
+    qar_grid = np.zeros_like(dice_stroma_grid)
+    
+    # Fixed volumes for this visualization
+    vs = 500
+    vt = 500
+    
+    # Calculate QAR for each combination of Dice scores
+    for i in range(len(dice_values)):
+        for j in range(len(dice_values)):
+            d_s = dice_stroma_grid[i, j]
+            d_t = dice_tumor_grid[i, j]
+            itsp_high, itsp_low = calculate_qar(vs, vt, d_s, d_t)
+            qar_grid[i, j] = np.abs(itsp_high - itsp_low) * 100  # Convert to percentage
+    
+    # Find the indices in dice_values that are closest to the given tumor_dice and stroma_dice
+    stroma_idx = np.abs(dice_values - stroma_dice).argmin()
+    tumor_idx = np.abs(dice_values - tumor_dice).argmin()
+    
+    # Get the QAR value at these indices
+    specific_qar = qar_grid[tumor_idx, stroma_idx]
+
+    # Create the 3D plot with larger figure size
+    fig = plt.figure(figsize=(14, 12))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Plot the surface
+    surf = ax.plot_surface(
+        dice_stroma_grid, 
+        dice_tumor_grid, 
+        qar_grid, 
+        cmap='viridis',
+        linewidth=0, 
+        antialiased=True,
+        alpha=0.8
+    )
+    
+    # Add a prominent scatter point for the specific dice scores
+    ax.scatter(
+        stroma_dice, 
+        tumor_dice, 
+        specific_qar, 
+        color='red', 
+        marker='o', 
+        s=200,  # Larger size
+        edgecolor='black',
+        linewidth=2,
+        label=f'Dice Scores: Stroma={stroma_dice:.2f}, Tumor={tumor_dice:.2f}',
+        alpha=1
+    )
+    
+    # Add a text annotation near the point
+    ax.text(
+        stroma_dice + 0.03, 
+        tumor_dice + 0.03, 
+        specific_qar + 5, 
+        f'QAR: {specific_qar:.1f}%', 
+        color='black',
+        fontweight='bold',
+        fontsize=12
+    )
+    
+    # Add a color bar
+    cbar = fig.colorbar(surf, ax=ax, shrink=0.7, aspect=10)
+    cbar.set_label('QAR (%)', fontsize=12)
+    
+    # Set labels and title
+    ax.set_xlabel('Stroma Dice Score', fontsize=12)
+    ax.set_ylabel('Tumor Dice Score', fontsize=12)
+    ax.set_zlabel('QAR (%)', fontsize=12)
+    ax.set_title('Quantification Ambiguity Range (QAR) vs Dice Scores', fontsize=16)
+    
+    # Set axis limits
+    ax.set_xlim(0.1, 0.99)
+    ax.set_ylim(0.1, 0.99)
+    
+    # Add grid lines
+    ax.grid(True, alpha=0.3)
+    
+    # Adjust the viewing angle for better visualization
+    ax.view_init(elev=30, azim=45)
+    
+    # Save the figure
+    plt.savefig(output_path / "qar_3d_plot.png", dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    
+    return output_path / "qar_3d_plot.png"
